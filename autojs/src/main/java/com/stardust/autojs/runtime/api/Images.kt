@@ -19,12 +19,16 @@ import com.stardust.autojs.core.image.capture.ScreenCaptureRequester
 import com.stardust.autojs.core.opencv.Mat
 import com.stardust.autojs.core.opencv.OpenCVHelper
 import com.stardust.autojs.core.ui.inflater.util.Drawables
+import com.stardust.autojs.core.util.ScriptPromiseAdapter
 import com.stardust.autojs.runtime.ScriptRuntime
 import com.stardust.pio.UncheckedIOException
 import com.stardust.util.ScreenMetrics
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
 import io.reactivex.rxjava3.disposables.Disposable
 import io.reactivex.rxjava3.functions.Consumer
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.opencv.core.Point
 import org.opencv.core.Rect
@@ -62,6 +66,41 @@ class Images(
             Log.e(Images::class.java.name, "请求截图权限失败", e)
             false
         }
+    }
+
+    fun requestScreenCaptureLegacy(orientation: Int): ScriptPromiseAdapter {
+        val outerPromise = ScriptPromiseAdapter()
+
+        GlobalScope.launch(Dispatchers.Main) {
+            try {
+                val innerPromise = mScreenCaptureRequester.requestScreenCaptureLegacy(
+                    mContext,
+                    orientation
+                )
+
+                // 使用 object : ScriptPromiseAdapter.Callback
+                innerPromise.onResolve(object : ScriptPromiseAdapter.Callback {
+                    override fun call(arg: Any?) {
+                        outerPromise.resolve(arg)
+                    }
+                })
+
+                innerPromise.onReject(object : ScriptPromiseAdapter.Callback {
+                    override fun call(arg: Any?) {
+                        mScriptRuntime.toast(arg as String?)
+                        Log.e(Images::class.java.name, "请求截图权限失败: $arg")
+                        outerPromise.resolve(false)
+                    }
+                })
+
+            } catch (e: Exception) {
+                mScriptRuntime.toast(e.message)
+                Log.e(Images::class.java.name, "请求截图权限失败", e)
+                outerPromise.resolve(false)
+            }
+        }
+
+        return outerPromise
     }
 
     fun stopScreenCapturer() {
