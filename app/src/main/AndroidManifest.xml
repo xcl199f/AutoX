@@ -195,6 +195,14 @@
         </activity-alias>
 
         <service
+            android:name="org.autojs.autojs.devplugin.DevPluginServiceImpl"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="org.autojs.autojs.devplugin.IDevPluginService" />
+            </intent-filter>
+        </service>
+        <service
             android:name="org.autojs.autojs.tool.AccessibilityProxyServiceImpl"
             android:enabled="true"
             android:exported="false">

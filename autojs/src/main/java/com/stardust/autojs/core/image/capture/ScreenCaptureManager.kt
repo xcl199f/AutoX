@@ -7,18 +7,19 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
-import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.activity.result.contract.ActivityResultContract
 import com.github.aiselp.autox.activity.TransparentActivity
+import com.stardust.autojs.core.image.capture.ScreenCaptureRequester.Callback
 import com.stardust.autojs.core.util.ScriptPromiseAdapter
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.concurrent.CancellationException
-import com.stardust.autojs.core.image.capture.ScreenCaptureRequester.Callback
 
 class ScreenCaptureManager : ScreenCaptureRequester {
     @Volatile
@@ -80,11 +81,7 @@ class ScreenCaptureManager : ScreenCaptureRequester {
         )
 
         // 绑定后立即启动服务
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.startForegroundService(serviceIntent)
-        } else {
-            context.startService(serviceIntent)
-        }
+        context.startForegroundService(serviceIntent)
 
         delay(50)  // 短暂等待服务启动
 
@@ -102,7 +99,7 @@ class ScreenCaptureManager : ScreenCaptureRequester {
 
         val callback = object : Callback {
             override fun onRequestResult(result: Int, data: Intent?) {
-                GlobalScope.launch {
+                CoroutineScope(Dispatchers.Main).launch {
                     try {
                         if (result == Activity.RESULT_OK && data != null) {
                             setupScreenCapture(data, orientation, context)
@@ -113,6 +110,8 @@ class ScreenCaptureManager : ScreenCaptureRequester {
                     } catch (e: Exception) {
                         Log.e("SCREEN_LEGACY", "Manager-创建失败: ${e.message}")
                         promiseAdapter.resolve(false)
+                    } finally {
+                        cancel()  // 执行完自动取消
                     }
                 }
             }
