@@ -2,6 +2,7 @@ package com.stardust.autojs.core.floaty
 
 import android.content.Context
 import android.graphics.PixelFormat
+import android.os.Build
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -87,5 +88,19 @@ class RawWindow(rawFloaty: RawFloaty, context: Context) : FloatyWindow() {
                 windowLayoutParams.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
         }
         updateWindowLayoutParams(windowLayoutParams)
+    }
+
+    /**
+     * 设置是否可以覆盖状态栏
+     * @param cover true: 覆盖状态栏, false: 不覆盖
+     */
+    fun setCoverStatusBar(cover: Boolean) {
+        val params = windowLayoutParams
+        if (cover) {
+            params.flags = params.flags or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+        } else {
+            params.flags = params.flags and WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN.inv()
+        }
+        updateWindowLayoutParams(params)
     }
 }

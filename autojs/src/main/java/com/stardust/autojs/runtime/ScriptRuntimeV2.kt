@@ -87,15 +87,6 @@ class ScriptRuntimeV2(val builder: Builder) : ScriptRuntime(builder) {
         events = Events(uiHandler.context, accessibilityBridge, this)
         mThread = Thread.currentThread()
         sensors = Sensors(uiHandler.context, this)
-        try {
-            val topScope = getTopLevelScope()
-            if (topScope != null) {
-                topScope.put("devPlugin", topScope,
-                    Context.javaToJS(devPlugin, topScope))
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
     }
 
     override fun getUiHandler(): UiHandler {
