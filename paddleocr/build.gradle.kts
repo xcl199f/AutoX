@@ -57,9 +57,9 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.core.ktx)
 
-    // 添加v4的Kotlin协程依赖（可选）
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.5.0")
+    implementation("androidx.exifinterface:exifinterface:1.4.2")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.ext.junit)

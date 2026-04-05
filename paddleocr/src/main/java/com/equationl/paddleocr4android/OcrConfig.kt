@@ -1,7 +1,5 @@
 package com.equationl.paddleocr4android
 
-import android.R.attr.value
-
 data class OcrConfig(
     /**
      * 模型路径（默认为 assets 目录下的预装模型）

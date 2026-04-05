@@ -1,13 +1,10 @@
 package com.stardust.autojs.servicecomponents
 
-import android.annotation.SuppressLint
-import android.app.ActivityManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.os.Binder
-import android.os.Build
 import android.os.Bundle
 import android.os.Debug
 import android.os.Handler
@@ -17,7 +14,6 @@ import com.stardust.app.GlobalAppContext
 import com.stardust.autojs.IndependentScriptService
 import com.stardust.autojs.core.console.ConsoleImpl
 import com.stardust.autojs.core.console.LogEntry
-import com.stardust.autojs.core.pref.Pref
 import com.stardust.autojs.execution.ExecutionConfig
 import com.stardust.util.UiHandler
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
@@ -25,7 +21,6 @@ import kotlinx.coroutines.CompletableJob
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 

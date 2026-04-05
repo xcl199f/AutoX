@@ -3,8 +3,9 @@ package com.equationl.paddleocr4android.Util.paddle
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Matrix
-import android.media.ExifInterface
+import androidx.exifinterface.media.ExifInterface
 import android.os.Environment
+import androidx.core.graphics.scale
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.File
@@ -16,7 +17,6 @@ import java.io.OutputStream
 import java.util.Locale
 import kotlin.math.floor
 import kotlin.math.max
-import androidx.core.graphics.scale
 
 object Utils {
     private val TAG: String = Utils::class.java.simpleName
