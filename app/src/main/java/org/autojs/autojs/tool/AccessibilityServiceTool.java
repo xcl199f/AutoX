@@ -81,6 +81,7 @@ public class AccessibilityServiceTool {
         }
         return false;
     }
+
     public static boolean enableAccessibilityServiceByRootAndWaitFor(long timeOut) {
 
         final AtomicBoolean shouldWait = new AtomicBoolean(true);
