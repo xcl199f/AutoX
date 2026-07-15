@@ -107,7 +107,8 @@ class ScreenCapturer(
     }
 
     private fun refreshVirtualDisplay(orientation: Int) = synchronized(this) {
-        latestImage.set(null)
+        latestImage.getAndSet(null)?.close()
+        cachedImageBitmap.set(null)
         mImageReader.close()
         val screenHeight = ScreenMetrics.getOrientationAwareScreenHeight(orientation)
         val screenWidth = ScreenMetrics.getOrientationAwareScreenWidth(orientation)

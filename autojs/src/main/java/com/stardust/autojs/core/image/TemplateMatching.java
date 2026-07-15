@@ -32,10 +32,14 @@ public class TemplateMatching {
     public static class Match {
         public final Point point;
         public final double similarity;
+        public int width;
+        public int height;
 
-        public Match(Point point, double similarity) {
+        public Match(Point point, double similarity, int width, int height) {
             this.point = point;
             this.similarity = similarity;
+            this.width = width;
+            this.height = height;
         }
 
         @NonNull
@@ -44,6 +48,8 @@ public class TemplateMatching {
             return "Match{" +
                     "point=" + point +
                     ", similarity=" + similarity +
+                    ", width=" + width +
+                    ", height=" + height +
                     '}';
         }
     }
@@ -53,13 +59,14 @@ public class TemplateMatching {
     public static final int MAX_LEVEL_AUTO = -1;
     public static final int MATCHING_METHOD_DEFAULT = Imgproc.TM_CCOEFF_NORMED;
 
-    public static Point fastTemplateMatching(Mat img, Mat template, int matchMethod, float weakThreshold, float strictThreshold, int maxLevel, Boolean transparentMask) {
-        List<Match> result = fastTemplateMatching(img, template, matchMethod, weakThreshold, strictThreshold, maxLevel, 1, transparentMask);
-        if (result.isEmpty()) {
-            return null;
-        }
+    public static Point fastTemplateMatching(Mat img, Mat template, int matchMethod,
+            float weakThreshold, float strictThreshold, int maxLevel, Boolean transparentMask, boolean useGrayscale) {
+        List<Match> result = fastTemplateMatching(img, template, matchMethod, weakThreshold,
+                strictThreshold, maxLevel, 1, transparentMask, useGrayscale);
+        if (result.isEmpty()) return null;
         return result.get(0).point;
     }
+
 
     /**
      * 采用图像金字塔算法快速找图
@@ -72,12 +79,17 @@ public class TemplateMatching {
      * @param maxLevel        图像金字塔的层数
      * @return
      */
-    public static List<Match> fastTemplateMatching(Mat img, Mat template, int matchMethod, float weakThreshold, float strictThreshold, int maxLevel, int limit, Boolean transparentMask) {
+    public static List<Match> fastTemplateMatching(Mat img, Mat template, int matchMethod, float weakThreshold,
+            float strictThreshold, int maxLevel, int limit, Boolean transparentMask, boolean useGrayscale) {
         TimingLogger logger = new TimingLogger(LOG_TAG, "fast_tm");
         // 创建资源回收列表
         List<Mat> resourcesToRelease = new ArrayList<>();
 
         try {
+            if (useGrayscale) {
+                img = toGrayscaleIfNeeded(img, resourcesToRelease);
+                template = toGrayscaleIfNeeded(template, resourcesToRelease);
+            }
             if (maxLevel == MAX_LEVEL_AUTO) {
                 maxLevel = selectPyramidLevel(img, template);
                 logger.addSplit("selectPyramidLevel:" + maxLevel);
@@ -105,7 +117,8 @@ public class TemplateMatching {
                 if (currentMask != null) {
                     resourcesToRelease.add(currentMask);
                 }
-
+                int actualW = currentTemplate.width() << level;
+                int actualH = currentTemplate.height() << level;
                 // 如果在上一轮中没有匹配到图片，则考虑是否退出匹配
                 if (previousMatchResult.isEmpty()) {
                     // 如果不是第一次匹配，并且不满足shouldContinueMatching的条件，则直接退出匹配
@@ -114,7 +127,8 @@ public class TemplateMatching {
                     }
                     Mat matchResult = matchTemplate(src, currentTemplate, matchMethod, currentMask);
                     resourcesToRelease.add(matchResult);
-                    getBestMatched(matchResult, currentTemplate, matchMethod, weakThreshold, currentMatchResult, limit, null);
+                    getBestMatched(matchResult, currentTemplate, matchMethod, weakThreshold,
+                            currentMatchResult, limit, null, actualW, actualH);
                 } else {
                     for (Match match : previousMatchResult) {
                         Rect r = getROI(match.point, src, currentTemplate);
@@ -125,7 +139,8 @@ public class TemplateMatching {
                         resourcesToRelease.add(m);
                         resourcesToRelease.add(matchResult);
 
-                        getBestMatched(matchResult, currentTemplate, matchMethod, weakThreshold, currentMatchResult, limit, r);
+                        getBestMatched(matchResult, currentTemplate, matchMethod, weakThreshold,
+                                currentMatchResult, limit, r, actualW, actualH);
                     }
                 }
 
@@ -164,6 +179,15 @@ public class TemplateMatching {
         }
     }
 
+    public static Mat toGrayscaleIfNeeded(Mat image, List<Mat> resources) {
+        if (image.channels() == 1 && image.type() == CvType.CV_8UC1) {
+            return image;
+        }
+        Mat gray = new Mat();
+        Imgproc.cvtColor(image, gray, Imgproc.COLOR_BGR2GRAY);
+        resources.add(gray);
+        return gray;
+    }
 
     private static Mat getPyramidDownAtLevel(Mat m, int level) {
         if (level == 0) {
@@ -237,9 +261,10 @@ public class TemplateMatching {
         return result;
     }
 
-    private static void getBestMatched(Mat tmResult, Mat template, int matchMethod, float weakThreshold, List<Match> outResult, int limit, Rect rect) {
+    private static void getBestMatched(Mat tmResult, Mat template, int matchMethod, float weakThreshold,
+               List<Match> outResult, int limit, Rect rect, int actualWidth, int actualHeight) {
         for (int i = 0; i < limit; i++) {
-            Match bestMatched = getBestMatched(tmResult, matchMethod, weakThreshold, rect);
+            Match bestMatched = getBestMatched(tmResult, matchMethod, weakThreshold, rect, actualWidth, actualHeight);
             if (bestMatched == null) {
                 break;
             }
@@ -252,7 +277,7 @@ public class TemplateMatching {
         }
     }
 
-    private static Match getBestMatched(Mat tmResult, int matchMethod, float weakThreshold, Rect rect) {
+    private static Match getBestMatched(Mat tmResult, int matchMethod, float weakThreshold, Rect rect, int actualWidth, int actualHeight) {
         TimingLogger logger = new TimingLogger(LOG_TAG, "best_matched_point");
         Core.MinMaxLocResult mmr = Core.minMaxLoc(tmResult);
         logger.addSplit("minMaxLoc");
@@ -273,10 +298,10 @@ public class TemplateMatching {
             pos.y += rect.y;
         }
         logger.addSplit("value:" + value);
-        if(!Double.isFinite(value)){
-            return getBestMatched(replaceNoFinite(tmResult), matchMethod, weakThreshold, rect);
+        if (!Double.isFinite(value)) {
+            return getBestMatched(replaceNoFinite(tmResult), matchMethod, weakThreshold, rect, actualWidth, actualHeight);
         }
-        return new Match(pos, value);
+        return new Match(pos, value, actualWidth, actualHeight);
     }
 
 

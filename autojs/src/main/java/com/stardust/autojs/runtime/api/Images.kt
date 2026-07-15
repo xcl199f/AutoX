@@ -26,7 +26,9 @@ import com.stardust.util.ScreenMetrics
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
 import io.reactivex.rxjava3.disposables.Disposable
 import io.reactivex.rxjava3.functions.Consumer
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.opencv.core.Point
 import org.opencv.core.Rect
 import org.opencv.imgproc.Imgproc
@@ -65,14 +67,13 @@ class Images(
         }
     }
 
-    fun requestScreenCaptureLegacy(orientation: Int): ScriptPromiseAdapter {
-        val outerPromise = ScriptPromiseAdapter()
+    fun requestScreenCaptureLegacyAsync(orientation: Int, deferred: CompletableDeferred<Boolean>) {
         val weakImages = java.lang.ref.WeakReference(this)
 
         try {
             val images = weakImages.get() ?: run {
-                outerPromise.resolve(false)
-                return outerPromise
+                deferred.complete(false)
+                return
             }
 
             val innerPromise = images.mScreenCaptureRequester.requestScreenCaptureLegacy(
@@ -82,7 +83,7 @@ class Images(
 
             innerPromise.onResolve(object : ScriptPromiseAdapter.Callback {
                 override fun call(arg: Any?) {
-                    outerPromise.resolve(arg)
+                    deferred.complete(true)
                 }
             })
 
@@ -91,17 +92,33 @@ class Images(
                     val img = weakImages.get()
                     img?.mScriptRuntime?.toast(arg as String?)
                     Log.e(Images::class.java.name, "请求截图权限失败: $arg")
-                    outerPromise.resolve(false)
+                    deferred.complete(false)
                 }
             })
         } catch (e: Exception) {
             val images = weakImages.get()
             images?.mScriptRuntime?.toast(e.message)
             Log.e(Images::class.java.name, "请求截图权限失败", e)
-            outerPromise.resolve(false)
+            deferred.complete(false)
         }
+    }
 
-        return outerPromise
+    fun requestScreenCaptureLegacy(orientation: Int, timeoutMs: Long = 0): Boolean {
+        val deferred = CompletableDeferred<Boolean>()
+        requestScreenCaptureLegacyAsync(orientation, deferred)
+        return runBlocking {
+            try {
+                if (timeoutMs > 0) {
+                    withTimeout(timeoutMs) {
+                        deferred.await()
+                    }
+                } else {
+                    true
+                }
+            } catch (e: Exception) {
+                false
+            }
+        }
     }
 
     fun stopScreenCapturer() {
@@ -266,7 +283,8 @@ class Images(
         threshold: Float,
         rect: Rect?,
         maxLevel: Int,
-        transparentMask: Boolean = false
+        transparentMask: Boolean = false,
+        useGrayscale: Boolean = false
     ): Point? {
         initOpenCvIfNeeded()
         if (image == null) throw NullPointerException("image = null")
@@ -277,7 +295,7 @@ class Images(
         }
         val point = TemplateMatching.fastTemplateMatching(
             src, template.mat, TemplateMatching.MATCHING_METHOD_DEFAULT,
-            weakThreshold, threshold, maxLevel, transparentMask
+            weakThreshold, threshold, maxLevel, transparentMask, useGrayscale
         )
         if (point != null) {
             if (rect != null) {
@@ -302,7 +320,8 @@ class Images(
         rect: Rect?,
         maxLevel: Int,
         limit: Int,
-        transparentMask: Boolean = false
+        transparentMask: Boolean = false,
+        useGrayscale: Boolean = false
     ): List<TemplateMatching.Match> {
         initOpenCvIfNeeded()
         if (image == null) throw NullPointerException("image = null")
@@ -314,7 +333,7 @@ class Images(
 
         val result = TemplateMatching.fastTemplateMatching(
             src, template.mat, Imgproc.TM_CCOEFF_NORMED,
-            weakThreshold, threshold, maxLevel, limit, transparentMask
+            weakThreshold, threshold, maxLevel, limit, transparentMask, useGrayscale
         )
         for (match in result) {
             val point = match.point
@@ -322,8 +341,10 @@ class Images(
                 point.x += rect.x.toDouble()
                 point.y += rect.y.toDouble()
             }
+            match.width = (match.width * mScreenMetrics.scaleX(1))
+            match.height = (match.height * mScreenMetrics.scaleY(1))
             point.x = mScreenMetrics.scaleX(point.x.toInt()).toDouble()
-            point.y = mScreenMetrics.scaleX(point.y.toInt()).toDouble()
+            point.y = mScreenMetrics.scaleY(point.y.toInt()).toDouble()
         }
         if (src !== image.mat) {
             OpenCVHelper.release(src)
@@ -427,4 +448,31 @@ class Images(
         return Bitmap.createBitmap(origin, 0, 0, width, height, matrix, false)
     }
 
+    /**
+     * 回收所有追踪的图片
+     */
+    fun recycleAllImages() {
+        ImageWrapper.recycleAllTrackedImages()
+    }
+
+    /**
+     * 获取当前存活的图片数量
+     */
+    fun getAliveImageCount(): Int {
+        return ImageWrapper.getTrackedImageCount()
+    }
+
+    /**
+     * 启用图片追踪
+     */
+    fun enableImageTracking() {
+        ImageWrapper.enableTracking()
+    }
+
+    /**
+     * 禁用图片追踪
+     */
+    fun disableImageTracking() {
+        ImageWrapper.disableTracking()
+    }
 }

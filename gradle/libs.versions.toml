@@ -70,7 +70,7 @@ mozilla-rhino = "org.mozilla:rhino:1.8.1"
 mozilla-rhino-xml = "org.mozilla:rhino-xml:1.8.1"
 mozilla-rhino-tools = "org.mozilla:rhino-tools:1.8.1"
 # opencv
-opencv = "org.opencv:opencv:4.12.0"
+opencv = "org.opencv:opencv:4.13.0"
 # commons
 commons-exec = "org.apache.commons:commons-exec:1.5.0"
 commons-io = "commons-io:commons-io:2.6"

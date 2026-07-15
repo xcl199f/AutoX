@@ -63,6 +63,14 @@ class ScreenCaptureManager : ScreenCaptureRequester {
                             .getMediaProjection(Activity.RESULT_OK, result)
                     CaptureForegroundService.setMediaProjection(context, mediaProjection!!)
                     screenCapture = ScreenCapturer(mediaProjection!!, orientation)
+                    var retry = 0
+                    while (retry < 10) {
+                        if (screenCapture?.isValid() == true) {
+                            break
+                        }
+                        Thread.sleep(50)
+                        retry++
+                    }
                 } finally {
                     serviceConnected.complete(Unit)
                     context.unbindService(this)
@@ -111,6 +119,17 @@ class ScreenCaptureManager : ScreenCaptureRequester {
                     val manager = weakManager.get()
                     if (manager == null) {
                         promiseAdapter.resolve(false)
+                        return
+                    }
+
+                    if (manager.screenCapture?.isValid() == true) {
+                        promiseAdapter.resolve(true)
+                        return
+                    }
+
+                    if (result == Activity.RESULT_OK && data == null) {
+                        Log.w("SCREEN_LEGACY", "data is null, retrying")
+                        doRequest()
                         return
                     }
 

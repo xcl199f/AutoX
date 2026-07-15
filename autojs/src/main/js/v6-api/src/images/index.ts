@@ -16,6 +16,7 @@ interface FindImageOptions {
     level?: number
     weakThreshold?: number
     transparentMask?: boolean
+    useGrayscale?: boolean
 }
 
 function images() {
@@ -56,7 +57,7 @@ images.requestScreenCapture = function (landscape: boolean) {
     return javaImages.requestScreenCapture(orientation);
 }
 
-images.requestScreenCaptureLegacy = function (landscape: boolean) {
+images.requestScreenCaptureLegacy = function (landscape: boolean, timeout: number) {
     const ScreenCapturer = com.stardust.autojs.core.image.capture.ScreenCapturer;
     var orientation = ScreenCapturer.ORIENTATION_AUTO;
     if (landscape === true) {
@@ -65,7 +66,7 @@ images.requestScreenCaptureLegacy = function (landscape: boolean) {
     if (landscape === false) {
         orientation = ScreenCapturer.ORIENTATION_PORTRAIT;
     }
-    return javaImages.requestScreenCaptureLegacy(orientation);
+    return javaImages.requestScreenCaptureLegacy(orientation, timeout);
 };
 
 images.save = function (img: Image, path: string, format?: ImageFormat, quality?: number) {
@@ -328,10 +329,11 @@ images.findImage = function (img: Image, template: Image, options?: FindImageOpt
     }
     var weakThreshold = options.weakThreshold || 0.6;
     const transparentMask = !!options.transparentMask
+    const useGrayscale = !!options.useGrayscale
     if (options.region) {
-        return javaImages.findImage(img, template, weakThreshold, threshold, buildRegion(options.region, img), maxLevel, transparentMask);
+        return javaImages.findImage(img, template, weakThreshold, threshold, buildRegion(options.region, img), maxLevel, transparentMask, useGrayscale);
     } else {
-        return javaImages.findImage(img, template, weakThreshold, threshold, null, maxLevel, transparentMask);
+        return javaImages.findImage(img, template, weakThreshold, threshold, null, maxLevel, transparentMask, useGrayscale);
     }
 }
 
@@ -348,10 +350,11 @@ images.matchTemplate = function (img: Image, template: Image,
     var weakThreshold = options.weakThreshold || 0.6;
     var result;
     const transparentMask = !!options.transparentMask
+    const useGrayscale = !!options.useGrayscale
     if (options.region) {
-        result = javaImages.matchTemplate(img, template, weakThreshold, threshold, buildRegion(options.region, img), maxLevel, max, transparentMask);
+        result = javaImages.matchTemplate(img, template, weakThreshold, threshold, buildRegion(options.region, img), maxLevel, max, transparentMask, useGrayscale);
     } else {
-        result = javaImages.matchTemplate(img, template, weakThreshold, threshold, null, maxLevel, max, transparentMask);
+        result = javaImages.matchTemplate(img, template, weakThreshold, threshold, null, maxLevel, max, transparentMask, useGrayscale);
     }
     return new MatchingResult(result);
 }
@@ -405,6 +408,22 @@ images.matToImage = function (img: Image) {
     initIfNeeded();
     return ImageWrapper.ofMat(img);
 }
+
+images.enableImageTracking = function () {
+    return javaImages.enableImageTracking();
+};
+
+images.disableImageTracking = function () {
+    return javaImages.disableImageTracking();
+};
+
+images.recycleAllImages = function () {
+    return javaImages.recycleAllImages();
+};
+
+images.getAliveImageCount = function () {
+    return javaImages.getAliveImageCount();
+};
 
 
 function toPointArray(points: unknown[]) {

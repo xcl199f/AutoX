@@ -14,7 +14,10 @@ import org.opencv.imgcodecs.Imgcodecs;
 
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
@@ -23,22 +26,89 @@ import androidx.annotation.RequiresApi;
  * Created by Stardust on 2017/11/25.
  */
 public class ImageWrapper {
+    private static final List<WeakReference<ImageWrapper>> sAllImages = new ArrayList<>();
+    private static final Object sLock = new Object();
+    private static boolean sTrackingEnabled = false;
+
+    /**
+     * 启用图片追踪（在脚本开始时调用）
+     */
+    public static void enableTracking() {
+        android.util.Log.d("ImageWrapper", "enableTracking called, sAllImages size before clear: " + sAllImages.size());
+        synchronized (sLock) {
+            sTrackingEnabled = true;
+            android.util.Log.d("ImageWrapper", "sTrackingEnabled set to true");
+            // 清除旧引用
+            int size = sAllImages.size();
+            sAllImages.clear();
+            android.util.Log.d("ImageWrapper", "sAllImages cleared, size before: " + size);
+        }
+        android.util.Log.d("ImageWrapper", "enableTracking done");
+    }
+
+    /**
+     * 禁用图片追踪（在脚本结束时调用）
+     */
+    public static void disableTracking() {
+        synchronized (sLock) {
+            sTrackingEnabled = false;
+            // 不立即清除，给回收机会
+        }
+    }
+
+    /**
+     * 回收所有追踪的图片
+     */
+    public static void recycleAllTrackedImages() {
+        synchronized (sLock) {
+            // 先清理已经回收的弱引用
+            sAllImages.removeIf(ref -> ref.get() == null);
+
+            // 回收所有存活的图片
+            for (WeakReference<ImageWrapper> ref : sAllImages) {
+                ImageWrapper img = ref.get();
+                if (img != null && img.isAlive()) {
+                    try {
+                        img.recycle();
+                    } catch (Exception e) {
+                        // 忽略单个图片的回收异常
+                    }
+                }
+            }
+
+            sAllImages.clear();
+        }
+    }
+
+    /**
+     * 获取当前追踪的图片数量
+     */
+    public static int getTrackedImageCount() {
+        synchronized (sLock) {
+            // 清理已回收的引用
+            sAllImages.removeIf(ref -> ref.get() == null);
+            return sAllImages.size();
+        }
+    }
 
     private Mat mMat;
     private int mWidth;
     private int mHeight;
     private Bitmap mBitmap;
+    private boolean mRecycled = false;
 
     protected ImageWrapper(Mat mat) {
         mMat = mat;
         mWidth = mat.cols();
         mHeight = mat.rows();
+        trackThis();
     }
 
     protected ImageWrapper(Bitmap bitmap) {
         mBitmap = bitmap;
         mWidth = bitmap.getWidth();
         mHeight = bitmap.getHeight();
+        trackThis();
     }
 
     protected ImageWrapper(Bitmap bitmap, Mat mat) {
@@ -46,12 +116,34 @@ public class ImageWrapper {
         mMat = mat;
         mWidth = bitmap.getWidth();
         mHeight = bitmap.getHeight();
+        trackThis();
     }
 
     public ImageWrapper(int width, int height) {
         this(Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888));
     }
 
+    private void trackThis() {
+        synchronized (sLock) {
+            if (sTrackingEnabled) {
+                // 清理已回收的引用
+                sAllImages.removeIf(ref -> ref.get() == null);
+                sAllImages.add(new WeakReference<>(this));
+
+                // 防止无限制增长（如果超过10000张，触发一次回收）
+                if (sAllImages.size() > 10000) {
+                    recycleAllTrackedImages();
+                }
+            }
+        }
+    }
+
+    /**
+     * 检查图片是否还存活（未被回收）
+     */
+    public boolean isAlive() {
+        return !mRecycled && (mBitmap != null || mMat != null);
+    }
 
     public static ImageWrapper ofImage(Image image) {
         if (image == null) {
@@ -142,16 +234,18 @@ public class ImageWrapper {
     }
 
     public void recycle() {
+        if (mRecycled) return;
+        mRecycled = true;
+
         mBitmap = null;
         if (mMat != null) {
             OpenCVHelper.release(mMat);
             mMat = null;
         }
-
     }
 
     public void ensureNotRecycled() {
-        if (mBitmap == null && mMat == null)
+        if (mRecycled || (mBitmap == null && mMat == null))
             throw new IllegalStateException("image has been recycled");
     }
 
@@ -159,12 +253,14 @@ public class ImageWrapper {
     @NonNull
     public ImageWrapper clone() {
         ensureNotRecycled();
+        ImageWrapper result;
         if (mBitmap == null) {
-            return ImageWrapper.ofMat(mMat.clone());
+            result = ImageWrapper.ofMat(mMat.clone());
+        } else if (mMat == null) {
+            result = ImageWrapper.ofBitmap(mBitmap.copy(mBitmap.getConfig(), true));
+        } else {
+            result = new ImageWrapper(mBitmap.copy(mBitmap.getConfig(), true), mMat.clone());
         }
-        if (mMat == null) {
-            return ImageWrapper.ofBitmap(mBitmap.copy(mBitmap.getConfig(), true));
-        }
-        return new ImageWrapper(mBitmap.copy(mBitmap.getConfig(), true), mMat.clone());
+        return result;
     }
 }
