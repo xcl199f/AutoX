@@ -4,7 +4,9 @@ import android.os.RemoteException
 import android.util.Log
 import com.aiselp.autox.engine.NodeScriptEngine
 import com.stardust.autojs.AutoJs
+import com.stardust.autojs.engine.ScriptEngine
 import com.stardust.autojs.execution.ExecutionConfig
+import com.stardust.autojs.execution.ScriptExecution
 import com.stardust.autojs.project.ProjectConfig
 import com.stardust.autojs.script.JavaScriptSource
 import com.stardust.autojs.script.ScriptFile
@@ -17,7 +19,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.util.concurrent.CopyOnWriteArraySet
 
@@ -108,6 +112,53 @@ object EngineController {
         }
     }
 
+    /**
+     * 在当前进程启动脚本并返回持有引擎的 [ScriptExecution]。
+     *
+     * 需要精确停止某个脚本的调用方（例如插件）应保留该句柄，
+     * 而不是通过 [serviceConnection] 走独立脚本进程的停止流程。
+     */
+    fun runScriptLocalTracked(
+        file: File,
+        listener: BinderScriptListener? = null,
+        config: ExecutionConfig? = null
+    ): ScriptExecution {
+        val source: ScriptSource = ScriptFile(file.path).toSource()
+        return AutoJs.instance.scriptEngineService.execute(
+            source,
+            listener?.toScriptExecutionListener(),
+            config ?: ExecutionConfig(workingDirectory = file.parent ?: "/")
+        )
+    }
+
+    /**
+     * 只停止 [execution] 对应的引擎；若它在创建引擎前就已退出则直接返回成功。
+     */
+    suspend fun stopTrackedScriptAndAwait(
+        execution: ScriptExecution,
+        timeoutMillis: Long = 5_000L
+    ): Boolean = TrackedScriptExecutionLifecycle.stopAndAwait(
+        execution,
+        isRegistered = { tracked ->
+            AutoJs.instance.scriptEngineService.getScriptExecution(tracked.id) === tracked
+        },
+        timeoutMillis = timeoutMillis
+    )
+
+    /**
+     * 等待 [execution] 的引擎销毁，或等待其无引擎退出。
+     */
+    suspend fun awaitTrackedScriptStopped(
+        execution: ScriptExecution,
+        timeoutMillis: Long = 5_000L
+    ): Boolean = TrackedScriptExecutionLifecycle.awaitStopped(
+        execution,
+        isRegistered = { tracked ->
+            AutoJs.instance.scriptEngineService.getScriptExecution(tracked.id) === tracked
+        },
+        timeoutMillis = timeoutMillis
+    )
+
     fun getAllScriptTasks(): Deferred<MutableList<TaskInfo>> = scope.async {
         return@async serviceConnection.getAllScriptTasks()
     }
@@ -143,4 +194,62 @@ object EngineController {
         globalScriptListener.remove(listener)
 
     private val TAG = "EngineController"
+}
+
+/**
+ * 配合 [EngineController.runScriptLocalTracked] 使用：轮询等待脚本引擎创建或销毁，
+ * 使调用方可以精确停止并确认单个脚本已退出。
+ */
+internal object TrackedScriptExecutionLifecycle {
+    private const val POLL_INTERVAL_MILLIS = 25L
+
+    suspend fun stopAndAwait(
+        execution: ScriptExecution,
+        isRegistered: (ScriptExecution) -> Boolean,
+        timeoutMillis: Long,
+        pollIntervalMillis: Long = POLL_INTERVAL_MILLIS
+    ): Boolean = withTimeoutOrNull(timeoutMillis) {
+        val engine = awaitEngine(execution, isRegistered, pollIntervalMillis)
+            ?: return@withTimeoutOrNull true
+        if (!engine.isDestroyed) {
+            engine.forceStop()
+        }
+        awaitEngineStopped(engine, pollIntervalMillis)
+        true
+    } ?: false
+
+    suspend fun awaitStopped(
+        execution: ScriptExecution,
+        isRegistered: (ScriptExecution) -> Boolean,
+        timeoutMillis: Long,
+        pollIntervalMillis: Long = POLL_INTERVAL_MILLIS
+    ): Boolean = withTimeoutOrNull(timeoutMillis) {
+        val engine = awaitEngine(execution, isRegistered, pollIntervalMillis)
+            ?: return@withTimeoutOrNull true
+        awaitEngineStopped(engine, pollIntervalMillis)
+        true
+    } ?: false
+
+    private suspend fun awaitEngine(
+        execution: ScriptExecution,
+        isRegistered: (ScriptExecution) -> Boolean,
+        pollIntervalMillis: Long
+    ): ScriptEngine<*>? {
+        while (true) {
+            execution.engine?.let { return it }
+            if (!isRegistered(execution)) {
+                return null
+            }
+            delay(pollIntervalMillis)
+        }
+    }
+
+    private suspend fun awaitEngineStopped(
+        engine: ScriptEngine<*>,
+        pollIntervalMillis: Long
+    ) {
+        while (!engine.isDestroyed) {
+            delay(pollIntervalMillis)
+        }
+    }
 }
