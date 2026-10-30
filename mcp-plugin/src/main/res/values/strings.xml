@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mcp_plugin_label">AutoX MCP 服务</string>
+    <string name="mcp_plugin_description">为 AutoX 提供 MCP（Model Context Protocol）服务，让大模型可以调用脚本执行、UI 操作、截图等工具。</string>
+
+    <string name="mcp_notification_title">MCP 服务运行中</string>
+    <string name="mcp_notification_text">LLM 工具已在配置的地址上可用</string>
+
+    <string name="mcp_settings_title">MCP 服务设置</string>
+    <string name="mcp_settings_enable_title">启用 MCP 服务</string>
+    <string name="mcp_settings_enable_summary">开启后由 AutoX 保持后台服务</string>
+    <string name="mcp_settings_host_title">监听地址</string>
+    <string name="mcp_settings_host_summary">默认 0.0.0.0，仅本机使用建议改为 127.0.0.1</string>
+    <string name="mcp_settings_port_title">监听端口</string>
+    <string name="mcp_settings_token_title">访问令牌</string>
+    <string name="mcp_settings_token_summary">留空表示不校验，建议在局域网环境下设置</string>
+    <string name="mcp_settings_allow_base64_title">允许返回 Base64 图像</string>
+    <string name="mcp_settings_allow_base64_summary">关闭时截图类工具仅返回文件路径</string>
+    <string name="mcp_settings_allow_network_title">允许局域网访问</string>
+    <string name="mcp_settings_allow_network_summary">关闭后强制只监听 127.0.0.1</string>
+    <string name="mcp_settings_category_server">服务</string>
+    <string name="mcp_settings_category_security">安全</string>
+</resources>

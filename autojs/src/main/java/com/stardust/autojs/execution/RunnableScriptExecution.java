@@ -17,7 +17,7 @@ import org.mozilla.javascript.ContinuationPending;
 public class RunnableScriptExecution extends ScriptExecution.AbstractScriptExecution implements Runnable {
 
     private static final String TAG = "RunnableJSExecution";
-    private ScriptEngine mScriptEngine;
+    private volatile ScriptEngine mScriptEngine;
     private ScriptEngineManager mScriptEngineManager;
 
     public RunnableScriptExecution(ScriptEngineManager manager, ScriptExecutionTask task) {
@@ -32,8 +32,20 @@ public class RunnableScriptExecution extends ScriptExecution.AbstractScriptExecu
     }
 
     public Object execute() {
-        mScriptEngine = mScriptEngineManager.createEngineOfSourceOrThrow(getSource(), getId());
-        mScriptEngine.setTag(ExecutionConfig.getTag(), getConfig());
+        try {
+            mScriptEngine = mScriptEngineManager.createEngineOfSourceOrThrow(getSource(), getId());
+            mScriptEngine.setTag(ExecutionConfig.getTag(), getConfig());
+        } catch (Throwable e) {
+            // 引擎创建失败时同样要通知监听器并释放资源，否则调用方会一直等待该任务
+            try {
+                onException(mScriptEngine, e);
+            } finally {
+                if (mScriptEngine != null && !mScriptEngine.isDestroyed()) {
+                    mScriptEngine.destroy();
+                }
+            }
+            return null;
+        }
         return execute(mScriptEngine);
     }
 
