@@ -1,83 +1,60 @@
-package org.autojs.autojs.ui.doc;
+package org.autojs.autojs.ui.doc
 
-import android.app.Dialog;
-import android.content.Context;
-import android.graphics.Color;
-import android.graphics.drawable.ColorDrawable;
-import android.view.View;
-import android.widget.TextView;
+import android.app.Dialog
+import android.content.Context
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
+import android.view.LayoutInflater
+import android.view.View
+import com.afollestad.materialdialogs.MaterialDialog
+import com.stardust.util.IntentUtil
+import org.autojs.autoxjs.R
+import org.autojs.autojs.ui.widget.EWebView
+import org.autojs.autoxjs.databinding.FloatingManualDialogBinding
 
-import com.afollestad.materialdialogs.MaterialDialog;
-import com.stardust.util.IntentUtil;
+class ManualDialog(private val context: Context) {
 
-import org.autojs.autoxjs.R;
-import org.autojs.autojs.ui.widget.EWebView;
+    private val binding = FloatingManualDialogBinding.inflate(LayoutInflater.from(context))
+    private val dialog: Dialog
+    private var currentUrl: String = ""
 
-import butterknife.BindView;
-import butterknife.ButterKnife;
-import butterknife.OnClick;
-
-/**
- * Created by Stardust on 2017/10/24.
- */
-
-public class ManualDialog {
-
-    @BindView(R.id.title)
-    TextView mTitle;
-
-    @BindView(R.id.eweb_view)
-    EWebView mEWebView;
-
-    @BindView(R.id.pin_to_left)
-    View mPinToLeft;
-
-    Dialog mDialog;
-    private Context mContext;
-
-    public ManualDialog(Context context) {
-        mContext = context;
-        View view = View.inflate(context, R.layout.floating_manual_dialog, null);
-        ButterKnife.bind(this, view);
-        mDialog = new MaterialDialog.Builder(context)
-                .customView(view, false)
-                .build();
-        mDialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+    init {
+        dialog = MaterialDialog.Builder(context)
+                .customView(binding.root, false)
+                .build()
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
     }
 
-
-    public ManualDialog title(String title) {
-        mTitle.setText(title);
-        return this;
+    fun title(title: String): ManualDialog {
+        binding.title.text = title
+        return this
     }
 
-    public ManualDialog url(String url) {
-        mEWebView.getWebView().loadUrl(url);
-        return this;
+    fun url(url: String): ManualDialog {
+        currentUrl = url
+        binding.ewebView.getWebView().loadUrl(url)
+        return this
     }
 
-    public ManualDialog pinToLeft(View.OnClickListener listener) {
-        mPinToLeft.setOnClickListener(v -> {
-            mDialog.dismiss();
-            listener.onClick(v);
-        });
-        return this;
+    fun pinToLeft(listener: View.OnClickListener): ManualDialog {
+        binding.pinToLeft.setOnClickListener {
+            dialog.dismiss()
+            listener.onClick(it)
+        }
+        return this
     }
 
-    public ManualDialog show() {
-        mDialog.show();
-        return this;
+    fun show(): ManualDialog {
+        dialog.show()
+        return this
     }
 
-    @OnClick(R.id.close)
-    void close() {
-        mDialog.dismiss();
+    fun close() {
+        dialog.dismiss()
     }
 
-    @OnClick(R.id.fullscreen)
-    void viewInNewActivity() {
-        mDialog.dismiss();
-        IntentUtil.browse(mContext,mEWebView.getWebView().getUrl());
+    fun viewInNewActivity() {
+        dialog.dismiss()
+        IntentUtil.browse(context, currentUrl)
     }
-
 }

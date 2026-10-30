@@ -217,8 +217,10 @@ open class LayoutHierarchyFloatyWindow(private val mRootNode: NodeInfo) : FullSc
     }
 
     private fun generateCode() {
+        val root = mRootNode ?: return
+        val selected = mSelectedNode ?: return
         DialogUtils.showDialog(
-            CodeGenerateDialog(mContext!!, mRootNode, mSelectedNode)
+            CodeGenerateDialog(mContext!!, root, selected)
                 .build()
         )
     }

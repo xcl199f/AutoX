@@ -1,307 +1,251 @@
-package org.autojs.autojs.ui.codegeneration;
+package org.autojs.autojs.ui.codegeneration
 
-import android.content.Context;
-import androidx.annotation.NonNull;
-import androidx.core.view.accessibility.AccessibilityNodeInfoCompat;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.ImageView;
-import android.widget.TextView;
-import android.widget.Toast;
+import android.content.Context
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.ImageView
+import android.widget.TextView
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.bignerdranch.expandablerecyclerview.ChildViewHolder
+import com.bignerdranch.expandablerecyclerview.ExpandableRecyclerAdapter
+import com.bignerdranch.expandablerecyclerview.ParentViewHolder
+import com.bignerdranch.expandablerecyclerview.model.Parent
+import com.stardust.app.DialogUtils
+import com.stardust.autojs.codegeneration.CodeGenerator
+import com.stardust.theme.util.ListBuilder
+import com.stardust.util.ClipboardUtil
+import com.stardust.view.accessibility.NodeInfo
+import org.autojs.autoxjs.R
+import org.autojs.autoxjs.databinding.DialogCodeGenerateBinding
+import org.autojs.autoxjs.databinding.DialogCodeGenerateOptionBinding
+import org.autojs.autoxjs.databinding.DialogCodeGenerateOptionGroupBinding
+import org.autojs.autojs.theme.dialog.ThemeColorMaterialDialogBuilder
+import org.autojs.autojs.ui.widget.CheckBoxCompat
+import java.util.ArrayList
 
-import com.bignerdranch.expandablerecyclerview.ChildViewHolder;
-import com.bignerdranch.expandablerecyclerview.ExpandableRecyclerAdapter;
-import com.bignerdranch.expandablerecyclerview.ParentViewHolder;
-import com.bignerdranch.expandablerecyclerview.model.Parent;
-import com.stardust.app.DialogUtils;
-import com.stardust.autojs.codegeneration.CodeGenerator;
-import org.autojs.autoxjs.R;
-import org.autojs.autojs.ui.widget.CheckBoxCompat;
-import org.autojs.autojs.theme.dialog.ThemeColorMaterialDialogBuilder;
-import com.stardust.theme.util.ListBuilder;
-import com.stardust.util.ClipboardUtil;
-import com.stardust.view.accessibility.NodeInfo;
+class CodeGenerateDialog(
+    context: Context,
+    private val rootNode: NodeInfo,
+    private val targetNode: NodeInfo
+) : ThemeColorMaterialDialogBuilder(context) {
 
-import java.util.ArrayList;
-import java.util.List;
+    private val binding = DialogCodeGenerateBinding.inflate(
+        LayoutInflater.from(context),
+        null,
+        false
+    )
 
-import butterknife.BindView;
-import butterknife.ButterKnife;
-import butterknife.OnCheckedChanged;
+    private val optionGroups = ListBuilder<OptionGroup>()
+        .add(OptionGroup(R.string.text_options, false)
+            .addOption(R.string.text_using_id_selector, true)
+            .addOption(R.string.text_using_text_selector, true)
+            .addOption(R.string.text_using_desc_selector, true))
+        .add(OptionGroup(R.string.text_select)
+            .addOption(R.string.text_find_one, true)
+            .addOption(R.string.text_until_find)
+            .addOption(R.string.text_wait_for)
+            .addOption(R.string.text_selector_exists))
+        .add(OptionGroup(R.string.text_action)
+            .addOption(R.string.text_click)
+            .addOption(R.string.text_long_click)
+            .addOption(R.string.text_set_text)
+            .addOption(R.string.text_scroll_forward)
+            .addOption(R.string.text_scroll_backward))
+        .list()
 
-/**
- * Created by Stardust on 2017/11/6.
- */
+    private lateinit var mAdapter: Adapter
 
-public class CodeGenerateDialog extends ThemeColorMaterialDialogBuilder {
-
-    private final List<OptionGroup> mOptionGroups = new ListBuilder<OptionGroup>()
-            .add(new OptionGroup(R.string.text_options, false)
-                    .addOption(R.string.text_using_id_selector, true)
-                    .addOption(R.string.text_using_text_selector, true)
-                    .addOption(R.string.text_using_desc_selector, true))
-            .add(new OptionGroup(R.string.text_select)
-                    .addOption(R.string.text_find_one, true)
-                    .addOption(R.string.text_until_find)
-                    .addOption(R.string.text_wait_for)
-                    .addOption(R.string.text_selector_exists))
-            .add(new OptionGroup(R.string.text_action)
-                    .addOption(R.string.text_click)
-                    .addOption(R.string.text_long_click)
-                    .addOption(R.string.text_set_text)
-                    .addOption(R.string.text_scroll_forward)
-                    .addOption(R.string.text_scroll_backward))
-            .list();
-
-    @BindView(R.id.options)
-    RecyclerView mOptionsRecyclerView;
-
-    private NodeInfo mRootNode;
-    private NodeInfo mTargetNode;
-    private Adapter mAdapter;
-
-    public CodeGenerateDialog(@NonNull Context context, NodeInfo rootNode, NodeInfo targetNode) {
-        super(context);
-        mRootNode = rootNode;
-        mTargetNode = targetNode;
-        positiveText(R.string.text_generate);
-        negativeText(R.string.text_cancel);
-        onPositive(((dialog, which) -> generateCodeAndShow()));
-        setupViews();
+    init {
+        positiveText(R.string.text_generate)
+        negativeText(R.string.text_cancel)
+        onPositive { _, _ -> generateCodeAndShow() }
+        setupViews()
     }
 
-    private void generateCodeAndShow() {
-        String code = generateCode();
+    private fun generateCodeAndShow() {
+        val code = generateCode()
         if (code == null) {
-            Toast.makeText(getContext(), R.string.text_generate_fail, Toast.LENGTH_SHORT).show();
-            return;
+            android.widget.Toast.makeText(context, R.string.text_generate_fail, android.widget.Toast.LENGTH_SHORT).show()
+            return
         }
-        DialogUtils.showDialog(new ThemeColorMaterialDialogBuilder(getContext())
+        DialogUtils.showDialog(
+            ThemeColorMaterialDialogBuilder(context)
                 .title(R.string.text_generated_code)
                 .content(code)
                 .positiveText(R.string.text_copy)
-                .onPositive(((dialog, which) -> ClipboardUtil.setClip(getContext(), code)))
-                .build());
+                .onPositive { _, _ -> ClipboardUtil.setClip(context, code) }
+                .build()
+        )
     }
 
-
-    private String generateCode() {
-        CodeGenerator generator = new CodeGenerator(mRootNode, mTargetNode);
-        OptionGroup settings = getOptionGroup(R.string.text_options);
-        generator.setUsingId(settings.getOption(R.string.text_using_id_selector).checked);
-        generator.setUsingText(settings.getOption(R.string.text_using_text_selector).checked);
-        generator.setUsingDesc(settings.getOption(R.string.text_using_desc_selector).checked);
-        generator.setSearchMode(getSearchMode());
-        setAction(generator);
-        return generator.generateCode();
+    private fun generateCode(): String? {
+        val generator = CodeGenerator(rootNode, targetNode)
+        val settings = getOptionGroup(R.string.text_options)
+        generator.setUsingId(settings.getOption(R.string.text_using_id_selector).checked)
+        generator.setUsingText(settings.getOption(R.string.text_using_text_selector).checked)
+        generator.setUsingDesc(settings.getOption(R.string.text_using_desc_selector).checked)
+        generator.setSearchMode(getSearchMode())
+        setAction(generator)
+        return generator.generateCode()
     }
 
-    private void setAction(CodeGenerator generator) {
-        OptionGroup action = getOptionGroup(R.string.text_action);
-        if (action.getOption(R.string.text_click).checked) {
-            generator.setAction(AccessibilityNodeInfoCompat.ACTION_CLICK);
-        }
-        if (action.getOption(R.string.text_long_click).checked) {
-            generator.setAction(AccessibilityNodeInfoCompat.ACTION_LONG_CLICK);
-        }
-        if (action.getOption(R.string.text_scroll_forward).checked) {
-            generator.setAction(AccessibilityNodeInfoCompat.ACTION_SCROLL_FORWARD);
-        }
-        if (action.getOption(R.string.text_scroll_backward).checked) {
-            generator.setAction(AccessibilityNodeInfoCompat.ACTION_SCROLL_BACKWARD);
+    private fun setAction(generator: CodeGenerator) {
+        val action = getOptionGroup(R.string.text_action)
+        when {
+            action.getOption(R.string.text_click).checked -> generator.setAction(AccessibilityNodeInfoCompat.ACTION_CLICK)
+            action.getOption(R.string.text_long_click).checked -> generator.setAction(AccessibilityNodeInfoCompat.ACTION_LONG_CLICK)
+            action.getOption(R.string.text_scroll_forward).checked -> generator.setAction(AccessibilityNodeInfoCompat.ACTION_SCROLL_FORWARD)
+            action.getOption(R.string.text_scroll_backward).checked -> generator.setAction(AccessibilityNodeInfoCompat.ACTION_SCROLL_BACKWARD)
         }
     }
 
-    private int getSearchMode() {
-        OptionGroup selectMode = getOptionGroup(R.string.text_select);
-        if (selectMode.getOption(R.string.text_find_one).checked) {
-            return CodeGenerator.FIND_ONE;
+    private fun getSearchMode(): Int {
+        val selectMode = getOptionGroup(R.string.text_select)
+        return when {
+            selectMode.getOption(R.string.text_find_one).checked -> CodeGenerator.FIND_ONE
+            selectMode.getOption(R.string.text_until_find).checked -> CodeGenerator.UNTIL_FIND
+            selectMode.getOption(R.string.text_wait_for).checked -> CodeGenerator.WAIT_FOR
+            selectMode.getOption(R.string.text_selector_exists).checked -> CodeGenerator.EXISTS
+            else -> CodeGenerator.FIND_ONE
         }
-        if (selectMode.getOption(R.string.text_until_find).checked) {
-            return CodeGenerator.UNTIL_FIND;
-        }
-        if (selectMode.getOption(R.string.text_wait_for).checked) {
-            return CodeGenerator.WAIT_FOR;
-        }
-        if (selectMode.getOption(R.string.text_selector_exists).checked) {
-            return CodeGenerator.EXISTS;
-        }
-        return CodeGenerator.FIND_ONE;
     }
 
-    private void setupViews() {
-        View view = View.inflate(context, R.layout.dialog_code_generate, null);
-        ButterKnife.bind(this, view);
-        customView(view, false);
-        mOptionsRecyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
-        mAdapter = new Adapter(mOptionGroups);
-        mOptionsRecyclerView.setAdapter(mAdapter);
+    private fun setupViews() {
+        customView(binding.root, false)
+        binding.options.layoutManager = LinearLayoutManager(context)
+        mAdapter = Adapter(optionGroups)
+        binding.options.adapter = mAdapter
     }
 
-
-    private OptionGroup getOptionGroup(int title) {
-        for (OptionGroup group : mOptionGroups) {
+    private fun getOptionGroup(title: Int): OptionGroup {
+        for (group in optionGroups) {
             if (group.titleRes == title) {
-                return group;
+                return group
             }
         }
-        throw new IllegalArgumentException();
+        throw IllegalArgumentException()
     }
 
-
-    private void uncheckOthers(int parentAdapterPosition, Option child) {
-        boolean notify = false;
-        for (Option other : child.group.options) {
-            if (other != child) {
-                if (other.checked) {
-                    other.checked = false;
-                    notify = true;
-                }
+    private fun uncheckOthers(parentAdapterPosition: Int, child: Option) {
+        val group = child.group ?: return
+        var notify = false
+        for (other in group.options) {
+            if (other != child && other.checked) {
+                other.checked = false
+                notify = true
             }
         }
-        if (notify)
-            mAdapter.notifyParentChanged(parentAdapterPosition);
+        if (notify) {
+            mAdapter.notifyParentChanged(parentAdapterPosition)
+        }
     }
 
-    private static class Option {
-        int titleRes;
-        boolean checked;
-        OptionGroup group;
+    private class Option(
+        val titleRes: Int,
+        var checked: Boolean,
+        var group: OptionGroup? = null
+    )
 
-        Option(int titleRes, boolean checked) {
-            this.titleRes = titleRes;
-            this.checked = checked;
-        }
+    private class OptionGroup(
+        val titleRes: Int,
+        private val initialExpanded: Boolean = true
+    ) : Parent<Option> {
+        val options = ArrayList<Option>()
 
-    }
-
-    class OptionViewHolder extends ChildViewHolder<Option> {
-
-        @BindView(R.id.title)
-        TextView title;
-        @BindView(R.id.checkbox)
-        CheckBoxCompat checkBox;
-
-        OptionViewHolder(@NonNull View itemView) {
-            super(itemView);
-            ButterKnife.bind(this, itemView);
-            itemView.setOnClickListener(view -> checkBox.toggle());
-        }
-
-        @OnCheckedChanged(R.id.checkbox)
-        void onCheckedChanged() {
-            getChild().checked = checkBox.isChecked();
-            if (checkBox.isChecked() && getChild().group.titleRes != R.string.text_options)
-                uncheckOthers(getParentAdapterPosition(), getChild());
-        }
-
-    }
-
-    private static class OptionGroup implements Parent<Option> {
-        int titleRes;
-        List<Option> options = new ArrayList<>();
-        private final boolean mInitialExpanded;
-
-
-        OptionGroup(int titleRes, boolean initialExpanded) {
-            this.titleRes = titleRes;
-            mInitialExpanded = initialExpanded;
-        }
-
-        OptionGroup(int titleRes) {
-            this(titleRes, true);
-        }
-
-        Option getOption(int titleRes) {
-            for (Option option : options) {
+        fun getOption(titleRes: Int): Option {
+            for (option in options) {
                 if (option.titleRes == titleRes) {
-                    return option;
+                    return option
                 }
             }
-            throw new IllegalArgumentException();
+            throw IllegalArgumentException()
         }
 
-        @Override
-        public List<Option> getChildList() {
-            return options;
+        override fun getChildList(): List<Option> = options
+
+        override fun isInitiallyExpanded(): Boolean = initialExpanded
+
+        fun addOption(titleRes: Int): OptionGroup {
+            return addOption(titleRes, false)
         }
 
-        @Override
-        public boolean isInitiallyExpanded() {
-            return mInitialExpanded;
-        }
-
-        OptionGroup addOption(int titleRes) {
-            return addOption(titleRes, false);
-        }
-
-        OptionGroup addOption(int res, boolean checked) {
-            Option option = new Option(res, checked);
-            option.group = this;
-            options.add(option);
-            return this;
+        fun addOption(res: Int, checked: Boolean = false): OptionGroup {
+            val option = Option(res, checked)
+            option.group = this
+            options.add(option)
+            return this
         }
     }
 
+    private inner class OptionViewHolder(itemView: View) : ChildViewHolder<Option>(itemView) {
+        private val binding = DialogCodeGenerateOptionBinding.bind(itemView)
 
-    private class OptionGroupViewHolder extends ParentViewHolder<OptionGroup, Option> {
-
-        TextView title;
-        ImageView icon;
-
-        OptionGroupViewHolder(@NonNull View itemView) {
-            super(itemView);
-            title = (TextView) itemView.findViewById(R.id.title);
-            icon = (ImageView) itemView.findViewById(R.id.icon);
-            itemView.setOnClickListener(view -> {
-                if (isExpanded()) {
-                    collapseView();
-                } else {
-                    expandView();
+        init {
+            itemView.setOnClickListener {
+                binding.checkbox.toggle()
+            }
+            binding.checkbox.setOnCheckedChangeListener { _, _ ->
+                val child = getChild()
+                child.checked = binding.checkbox.isChecked
+                if (binding.checkbox.isChecked && child.group?.titleRes != R.string.text_options) {
+                    uncheckOthers(parentAdapterPosition, child)
                 }
-            });
+            }
         }
 
-        @Override
-        public void onExpansionToggled(boolean expanded) {
-            icon.setRotation(expanded ? -90 : 0);
-        }
-    }
-
-    private class Adapter extends ExpandableRecyclerAdapter<OptionGroup, Option, OptionGroupViewHolder, OptionViewHolder> {
-
-        public Adapter(@NonNull List<OptionGroup> parentList) {
-            super(parentList);
-        }
-
-        @NonNull
-        @Override
-        public OptionGroupViewHolder onCreateParentViewHolder(@NonNull ViewGroup parentViewGroup, int viewType) {
-            return new OptionGroupViewHolder(LayoutInflater.from(parentViewGroup.getContext())
-                    .inflate(R.layout.dialog_code_generate_option_group, parentViewGroup, false));
-        }
-
-        @NonNull
-        @Override
-        public OptionViewHolder onCreateChildViewHolder(@NonNull ViewGroup childViewGroup, int viewType) {
-            return new OptionViewHolder(LayoutInflater.from(childViewGroup.getContext())
-                    .inflate(R.layout.dialog_code_generate_option, childViewGroup, false));
-        }
-
-        @Override
-        public void onBindParentViewHolder(@NonNull OptionGroupViewHolder viewHolder, int parentPosition, @NonNull OptionGroup optionGroup) {
-            viewHolder.title.setText(optionGroup.titleRes);
-            viewHolder.icon.setRotation(viewHolder.isExpanded() ? 0 : -90);
-        }
-
-        @Override
-        public void onBindChildViewHolder(@NonNull OptionViewHolder viewHolder, int parentPosition, int childPosition, @NonNull Option option) {
-            viewHolder.title.setText(option.titleRes);
-            viewHolder.checkBox.setChecked(option.checked, false);
+        fun bind(option: Option) {
+            binding.title.setText(option.titleRes)
+            binding.checkbox.setChecked(option.checked, false)
         }
     }
 
+    private inner class OptionGroupViewHolder(itemView: View) : ParentViewHolder<OptionGroup, Option>(itemView) {
+        private val binding = DialogCodeGenerateOptionGroupBinding.bind(itemView)
+
+        init {
+            itemView.setOnClickListener {
+                if (isExpanded) {
+                    collapseView()
+                } else {
+                    expandView()
+                }
+            }
+        }
+
+        override fun onExpansionToggled(expanded: Boolean) {
+            binding.icon.rotation = if (expanded) -90f else 0f
+        }
+
+        fun bind(group: OptionGroup) {
+            binding.title.setText(group.titleRes)
+            binding.icon.rotation = if (isExpanded) 0f else -90f
+        }
+    }
+
+    private inner class Adapter(parentList: List<OptionGroup>) :
+        ExpandableRecyclerAdapter<OptionGroup, Option, OptionGroupViewHolder, OptionViewHolder>(parentList) {
+
+        override fun onCreateParentViewHolder(parentViewGroup: ViewGroup, viewType: Int): OptionGroupViewHolder {
+            val view = LayoutInflater.from(parentViewGroup.context)
+                .inflate(R.layout.dialog_code_generate_option_group, parentViewGroup, false)
+            return OptionGroupViewHolder(view)
+        }
+
+        override fun onCreateChildViewHolder(childViewGroup: ViewGroup, viewType: Int): OptionViewHolder {
+            val view = LayoutInflater.from(childViewGroup.context)
+                .inflate(R.layout.dialog_code_generate_option, childViewGroup, false)
+            return OptionViewHolder(view)
+        }
+
+        override fun onBindParentViewHolder(viewHolder: OptionGroupViewHolder, parentPosition: Int, optionGroup: OptionGroup) {
+            viewHolder.bind(optionGroup)
+        }
+
+        override fun onBindChildViewHolder(viewHolder: OptionViewHolder, parentPosition: Int, childPosition: Int, option: Option) {
+            viewHolder.bind(option)
+        }
+    }
 }

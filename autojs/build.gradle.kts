@@ -1,3 +1,5 @@
+import com.android.build.gradle.internal.tasks.factory.dependsOn
+
 plugins {
     id("com.android.library")
     id("kotlin-android")
@@ -83,47 +85,61 @@ dependencies {
     implementation(libs.opencv)
     // libs
     implementation(libs.byte.buddy.android)
-    implementation("cz.adaptech:tesseract4android:4.1.1")
+    implementation(libs.tesseract4android.core)
     implementation(libs.bundles.mlkit)
+    implementation(libs.camera.core)
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
 }
-tasks.register<Exec>("buildV7Api") {
+tasks.register("buildV7Api") {
     group = "build"
     val v7ApiDir = File(projectDir, "src/main/js/v7-api")
     val v7ModuleDir = File(projectDir, "src/main/assets/v7modules")
-    workingDir = v7ApiDir
-    execCommand("node build.mjs")
+
+    inputs.dir(v7ApiDir)
+    outputs.dir(v7ModuleDir)
+
     doLast {
-        copy {
-            delete(v7ModuleDir)
-            from(File(v7ApiDir, "dist"))
+        exec {
+            workingDir = v7ApiDir
+            commandLine("node", "build.mjs")
+        }
+        sync {
+            from(File(v7ApiDir, "dist")) {
+                include("**/*.js")
+            }
             into(v7ModuleDir)
         }
-        delete(fileTree(v7ModuleDir) {
-            include("**/*.ts")
-        })
     }
 }
 
-tasks.register<Exec>("buildV6Api") {
+tasks.register("buildV6Api") {
     group = "build"
     val v6ApiDir = File(projectDir, "src/main/js/v6-api")
     val v6ModuleDir = File(projectDir, "src/main/assets/v6modules")
-    workingDir = v6ApiDir
-    execCommand("node build.mjs")
+
+    inputs.dir(v6ApiDir)
+    outputs.dir(v6ModuleDir)
+
     doLast {
-        copy {
-            delete(v6ModuleDir)
-            from(File(v6ApiDir, "dist"))
+        exec {
+            workingDir = v6ApiDir
+            commandLine("node", "build.mjs")
+        }
+        sync {
+            from(File(v6ApiDir, "dist")) {
+                include("**/*.js")
+            }
             into(v6ModuleDir)
         }
-        delete(fileTree(v6ModuleDir) {
-            include("**/*.ts")
-        })
     }
 }
 
 tasks.register("buildJsModule") {
     group = "build"
     dependsOn("buildV6Api", "buildV7Api")
+}
+
+// 让编译时自动触发
+tasks.named("preBuild") {
+    dependsOn("buildJsModule")
 }

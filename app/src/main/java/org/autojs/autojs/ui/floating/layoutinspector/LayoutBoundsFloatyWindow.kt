@@ -98,8 +98,10 @@ open class LayoutBoundsFloatyWindow(private val mRootNode: NodeInfo?) : FullScre
     }
 
     private fun generateCode() {
+        val root = mRootNode ?: return
+        val selected = mSelectedNode ?: return
         DialogUtils.showDialog(
-            CodeGenerateDialog(mContext!!, mRootNode, mSelectedNode)
+            CodeGenerateDialog(mContext!!, root, selected)
                 .build()
         )
     }

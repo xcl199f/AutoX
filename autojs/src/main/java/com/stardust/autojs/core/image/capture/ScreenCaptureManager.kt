@@ -21,6 +21,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.lang.ref.WeakReference
 import java.util.concurrent.CancellationException
+import kotlin.time.Duration.Companion.milliseconds
 
 class ScreenCaptureManager : ScreenCaptureRequester {
     @Volatile
@@ -127,7 +128,7 @@ class ScreenCaptureManager : ScreenCaptureRequester {
                             if (e.message?.contains("non-current") == true && retryCount < maxRetry) {
                                 retryCount++
                                 Log.w("SCREEN_LEGACY", "MediaProjection expired, retrying ($retryCount/$maxRetry)")
-                                delay(100)
+                                delay(100.milliseconds)
                                 doRequest()
                             } else {
                                 Log.e("SCREEN_LEGACY", "Failed after $maxRetry retries", e)
@@ -163,20 +164,20 @@ class ScreenCaptureManager : ScreenCaptureRequester {
         }
     }
 
-        override fun recycle() {
-            // 取消协程
-            currentCoroutineScope?.cancel()
-            currentCoroutineScope = null
+    override fun recycle() {
+        // 取消协程
+        currentCoroutineScope?.cancel()
+        currentCoroutineScope = null
 
-            // 清理连接
-            currentConnection = null
+        // 清理连接
+        currentConnection = null
 
-            // 释放截图器
-            screenCapture?.release()
-            screenCapture = null
+        // 释放截图器
+        screenCapture?.release()
+        screenCapture = null
 
-            // 停止并释放 MediaProjection
-            mediaProjection?.stop()
-            mediaProjection = null
-        }
+        // 停止并释放 MediaProjection
+        mediaProjection?.stop()
+        mediaProjection = null
+    }
 }

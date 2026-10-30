@@ -1,131 +1,91 @@
-package org.autojs.autojs.ui.common;
+package org.autojs.autojs.ui.common
 
-import android.content.Context;
-import androidx.annotation.Nullable;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
-import android.util.AttributeSet;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.ImageView;
-import android.widget.LinearLayout;
-import android.widget.TextView;
+import android.content.Context
+import android.util.AttributeSet
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import org.autojs.autoxjs.R
+import org.autojs.autoxjs.databinding.OptionListViewBinding
+import org.autojs.autoxjs.databinding.OperationDialogItemBinding
 
-import org.autojs.autoxjs.R;
+class OptionListView(context: Context, attrs: AttributeSet? = null) : LinearLayout(context, attrs) {
 
-import java.util.ArrayList;
+    interface OnItemClickListener {
+        fun onItemClick(position: Int, id: Int)
+    }
 
-import butterknife.BindView;
-import butterknife.ButterKnife;
+    private val ids = ArrayList<Int>()
+    private val icons = ArrayList<Int>()
+    private val texts = ArrayList<String>()
+    private var listener: OnItemClickListener? = null
 
-/**
- * Created by Stardust on 2017/10/20.
- */
+    private val binding = OptionListViewBinding.inflate(LayoutInflater.from(context), this, true)
 
-public class OptionListView extends LinearLayout {
+    init {
+        binding.list.layoutManager = LinearLayoutManager(context)
+        binding.list.adapter = Adapter()
+    }
 
+    fun setOnItemClickListener(listener: OnItemClickListener) {
+        this.listener = listener
+    }
 
-    public static class Builder {
+    class Builder(private val context: Context) {
+        private val view = OptionListView(context)
 
-        private OptionListView mOptionListView;
-        private Context mContext;
-
-        public Builder(Context context) {
-            mContext = context;
-            mOptionListView = (OptionListView) View.inflate(context, R.layout.option_list_view, null);
+        fun item(id: Int, iconRes: Int, textRes: Int): Builder {
+            return item(id, iconRes, context.getString(textRes))
         }
 
-        public Builder item(int id, int iconRes, int textRes) {
-            return item(id, iconRes, mContext.getString(textRes));
+        fun item(id: Int, iconRes: Int, text: String): Builder {
+            view.ids.add(id)
+            view.icons.add(iconRes)
+            view.texts.add(text)
+            return this
         }
 
-        public Builder item(int id, int iconRes, String text) {
-            mOptionListView.mIds.add(id);
-            mOptionListView.mIcons.add(iconRes);
-            mOptionListView.mTexts.add(text);
-            return this;
+        fun title(title: String): Builder {
+            view.binding.title.visibility = VISIBLE
+            view.binding.title.text = title
+            return this
         }
 
-        public Builder bindItemClick(Object target) {
-            mOptionListView.mOnItemClickTarget = target;
-            return this;
+        fun title(title: Int): Builder {
+            return title(context.getString(title))
         }
 
-        public Builder title(String title) {
-            mOptionListView.mTitleView.setVisibility(VISIBLE);
-            mOptionListView.mTitleView.setText(title);
-            return this;
+        fun bindItemClick(listener: OnItemClickListener): Builder {
+            view.setOnItemClickListener(listener)
+            return this
         }
 
-        public Builder title(int title) {
-            return title(mContext.getString(title));
-        }
-
-        public OptionListView build() {
-            return mOptionListView;
+        fun build(): OptionListView {
+            return view
         }
     }
 
-
-    private ArrayList<Integer> mIds = new ArrayList<>();
-    private ArrayList<Integer> mIcons = new ArrayList<>();
-    private ArrayList<String> mTexts = new ArrayList<>();
-    private Object mOnItemClickTarget;
-    private RecyclerView mOptionList;
-    private TextView mTitleView;
-
-    public OptionListView(Context context) {
-        super(context);
-    }
-
-    public OptionListView(Context context, @Nullable AttributeSet attrs) {
-        super(context, attrs);
-    }
-
-    @Override
-    protected void onFinishInflate() {
-        super.onFinishInflate();
-        mTitleView = (TextView) findViewById(R.id.title);
-        mOptionList = (RecyclerView) findViewById(R.id.list);
-        mOptionList.setLayoutManager(new LinearLayoutManager(getContext()));
-        mOptionList.setAdapter(new Adapter());
-    }
-
-    private class Adapter extends RecyclerView.Adapter<ViewHolder> {
-        @Override
-        public ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
-            return new ViewHolder(LayoutInflater.from(parent.getContext()).inflate(R.layout.operation_dialog_item, parent, false));
+    private inner class Adapter : RecyclerView.Adapter<ViewHolder>() {
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
+            val binding = OperationDialogItemBinding.inflate(LayoutInflater.from(parent.context), parent, false)
+            return ViewHolder(binding)
         }
 
-        @Override
-        public void onBindViewHolder(ViewHolder holder, int position) {
-            holder.itemView.setId(mIds.get(position));
-            holder.text.setText(mTexts.get(position));
-            holder.icon.setImageResource(mIcons.get(position));
-            if (mOnItemClickTarget != null) {
-                ButterKnife.bind(mOnItemClickTarget, holder.itemView);
+        override fun onBindViewHolder(holder: ViewHolder, position: Int) {
+            holder.binding.icon.setImageResource(icons[position])
+            holder.binding.text.text = texts[position]
+            holder.itemView.id = ids[position]
+            holder.itemView.setOnClickListener {
+                listener?.onItemClick(position, ids[position])
             }
         }
 
-        @Override
-        public int getItemCount() {
-            return mIds.size();
-        }
+        override fun getItemCount(): Int = ids.size
     }
 
-
-    class ViewHolder extends RecyclerView.ViewHolder {
-
-        @BindView(R.id.icon)
-        ImageView icon;
-        @BindView(R.id.text)
-        TextView text;
-
-        public ViewHolder(View itemView) {
-            super(itemView);
-            ButterKnife.bind(this, itemView);
-        }
-
-    }
+    private class ViewHolder(val binding: OperationDialogItemBinding) : RecyclerView.ViewHolder(binding.root)
 }

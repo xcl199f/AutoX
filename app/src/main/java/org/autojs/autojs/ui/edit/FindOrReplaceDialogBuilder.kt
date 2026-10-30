@@ -1,126 +1,113 @@
-package org.autojs.autojs.ui.edit;
+package org.autojs.autojs.ui.edit
 
-import android.content.Context;
-import android.preference.PreferenceManager;
-import androidx.annotation.NonNull;
-import android.text.TextUtils;
-import android.view.View;
-import android.widget.CheckBox;
-import android.widget.EditText;
+import android.content.Context
+import android.preference.PreferenceManager
+import android.text.TextUtils
+import android.view.LayoutInflater
+import android.view.View
+import androidx.core.widget.addTextChangedListener
+import com.afollestad.materialdialogs.MaterialDialog
+import org.autojs.autoxjs.R
+import org.autojs.autojs.theme.dialog.ThemeColorMaterialDialogBuilder
+import org.autojs.autojs.ui.edit.editor.CodeEditor
+import org.autojs.autoxjs.databinding.DialogFindOrReplaceBinding
+import androidx.core.content.edit
 
-import com.afollestad.materialdialogs.MaterialDialog;
+class FindOrReplaceDialogBuilder(
+    context: Context,
+    private val editorView: EditorView
+) : ThemeColorMaterialDialogBuilder(context) {
 
-import org.autojs.autoxjs.R;
-import org.autojs.autojs.theme.dialog.ThemeColorMaterialDialogBuilder;
-import org.autojs.autojs.ui.edit.editor.CodeEditor;
+    private val binding = DialogFindOrReplaceBinding.inflate(
+        LayoutInflater.from(context),
+        null,
+        false
+    )
 
-import butterknife.BindView;
-import butterknife.ButterKnife;
-import butterknife.OnCheckedChanged;
-import butterknife.OnTextChanged;
+    init {
+        setupViews()
+        restoreState()
+        autoDismiss(false)
+        onNegative { dialog, _ -> dialog.dismiss() }
+        onPositive { dialog, _ ->
+            storeState()
+            findOrReplace(dialog)
+        }
 
-/**
- * Created by Stardust on 2017/9/28.
- */
+        binding.checkboxReplaceAll.setOnCheckedChangeListener { _, _ ->
+            syncWithReplaceCheckBox()
+        }
 
-public class FindOrReplaceDialogBuilder extends ThemeColorMaterialDialogBuilder {
-
-    private static final String KEY_KEYWORDS = "...";
-
-    @BindView(R.id.checkbox_regex)
-    CheckBox mRegexCheckBox;
-
-    @BindView(R.id.checkbox_replace)
-    CheckBox mReplaceCheckBox;
-
-    @BindView(R.id.checkbox_replace_all)
-    CheckBox mReplaceAllCheckBox;
-
-    @BindView(R.id.keywords)
-    EditText mKeywordsEditText;
-
-    @BindView(R.id.replacement)
-    EditText mReplacementEditText;
-
-    private EditorView mEditorView;
-
-    public FindOrReplaceDialogBuilder(@NonNull Context context, EditorView editorView) {
-        super(context);
-        mEditorView = editorView;
-        setupViews();
-        restoreState();
-        autoDismiss(false);
-        onNegative((dialog, which) -> dialog.dismiss());
-        onPositive((dialog, which) -> {
-            storeState();
-            findOrReplace(dialog);
-        });
-    }
-
-    private void setupViews() {
-        View view = View.inflate(context, R.layout.dialog_find_or_replace, null);
-        ButterKnife.bind(this, view);
-        customView(view, true);
-        positiveText(R.string.ok);
-        negativeText(R.string.cancel);
-        title(R.string.text_find_or_replace);
-    }
-
-
-    private void storeState() {
-        PreferenceManager.getDefaultSharedPreferences(getContext()).edit()
-                .putString(KEY_KEYWORDS, mKeywordsEditText.getText().toString())
-                .apply();
-    }
-
-
-    private void restoreState() {
-        mKeywordsEditText.setText(PreferenceManager.getDefaultSharedPreferences(getContext())
-                .getString(KEY_KEYWORDS, ""));
-    }
-
-    @OnCheckedChanged(R.id.checkbox_replace_all)
-    void syncWithReplaceCheckBox() {
-        if (mReplaceAllCheckBox.isChecked() && !mReplaceCheckBox.isChecked()) {
-            mReplaceCheckBox.setChecked(true);
+        binding.replacement.addTextChangedListener {
+            onTextChanged()
         }
     }
 
-    @OnTextChanged(R.id.replacement)
-    void onTextChanged() {
-        if (mReplacementEditText.getText().length() > 0) {
-            mReplaceCheckBox.setChecked(true);
+    private fun setupViews() {
+        customView(binding.root, true)
+        positiveText(R.string.ok)
+        negativeText(R.string.cancel)
+        title(R.string.text_find_or_replace)
+    }
+
+    private fun storeState() {
+        PreferenceManager.getDefaultSharedPreferences(context)
+            .edit {
+                putString(KEY_KEYWORDS, binding.keywords.text.toString())
+            }
+    }
+
+    private fun restoreState() {
+        binding.keywords.setText(
+            PreferenceManager.getDefaultSharedPreferences(context)
+                .getString(KEY_KEYWORDS, "")
+        )
+    }
+
+    private fun syncWithReplaceCheckBox() {
+        if (binding.checkboxReplaceAll.isChecked && !binding.checkboxReplace.isChecked) {
+            binding.checkboxReplace.isChecked = true
         }
     }
 
-    private void findOrReplace(MaterialDialog dialog) {
-        String keywords = mKeywordsEditText.getText().toString();
+    private fun onTextChanged() {
+        if ((binding.replacement.text?.length ?: 0) > 0) {
+            binding.checkboxReplace.isChecked = true
+        }
+    }
+
+    private fun findOrReplace(dialog: MaterialDialog) {
+        val keywords = binding.keywords.text.toString()
         if (keywords.isEmpty()) {
-            return;
+            return
         }
         try {
-            boolean usingRegex = mRegexCheckBox.isChecked();
-            if (!mReplaceCheckBox.isChecked()) {
-                mEditorView.find(keywords, usingRegex);
+            val usingRegex = binding.checkboxRegex.isChecked
+            if (!binding.checkboxReplace.isChecked) {
+                editorView.find(keywords, usingRegex)
             } else {
-                String replacement = mReplacementEditText.getText().toString();
-                if (mReplaceAllCheckBox.isChecked()) {
-                    mEditorView.replaceAll(keywords, replacement, usingRegex);
+                val replacement = binding.replacement.text.toString()
+                if (binding.checkboxReplaceAll.isChecked) {
+                    editorView.replaceAll(keywords, replacement, usingRegex)
                 } else {
-                    mEditorView.replace(keywords, replacement, usingRegex);
+                    editorView.replace(keywords, replacement, usingRegex)
                 }
             }
-            dialog.dismiss();
-        } catch (CodeEditor.CheckedPatternSyntaxException e) {
-            e.printStackTrace();
-            mKeywordsEditText.setError(getContext().getString(R.string.error_pattern_syntax));
+            dialog.dismiss()
+        } catch (e: CodeEditor.CheckedPatternSyntaxException) {
+            e.printStackTrace()
+            binding.keywords.error = context.getString(R.string.error_pattern_syntax)
         }
-
     }
 
-    public FindOrReplaceDialogBuilder setQueryIfNotEmpty(String s) {
-        if (!TextUtils.isEmpty(s))
-            mKeywordsEditText.setText(s);
-        return this;
+    fun setQueryIfNotEmpty(s: String): FindOrReplaceDialogBuilder {
+        if (!TextUtils.isEmpty(s)) {
+            binding.keywords.setText(s)
+        }
+        return this
+    }
+
+    companion object {
+        private const val KEY_KEYWORDS = "..."
     }
 }

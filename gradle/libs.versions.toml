@@ -1,8 +1,10 @@
 [versions]
 activity = "1.9.1"
+camera = "1.5.3"
 coil-compose-version = "2.0.0-rc03"
 core-ktx = "1.13.0"
 google-gson = "2.9.1"
+gradle = "8.7.3"
 junit = "4.13.2"
 kotlinx-coroutines-android = "1.6.2"
 lifecycle = "2.8.7"
@@ -17,6 +19,8 @@ savedstate = "1.2.1"
 mlkit-text = "16.0.1"
 junit-ktx = "1.2.1"
 mlkit-common-version = "18.11.0"
+mlkit-barcode-scanning = "17.3.0"
+tesseract4android = "4.8.0"
 
 [libraries]
 # androidx
@@ -32,6 +36,7 @@ androidx-webkit = "androidx.webkit:webkit:1.14.0"
 documentfile = "androidx.documentfile:documentfile:1.0.1"
 androidx-savedstate = { module = "androidx.savedstate:savedstate", version.ref = "savedstate" }
 androidx-savedstate-ktx = { module = "androidx.savedstate:savedstate-ktx", version.ref = "savedstate" }
+gradle = { module = "com.android.tools.build:gradle", version.ref = "gradle" }
 preference-ktx = "androidx.preference:preference-ktx:1.2.1"
 androidx-annotation = "androidx.annotation:annotation:1.9.1"
 activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity" }
@@ -65,9 +70,9 @@ compose-animation = { module = "androidx.compose.animation:animation" }
 
 ##########################
 # rhino
-mozilla-rhino = "org.mozilla:rhino:1.8.1"
-mozilla-rhino-xml = "org.mozilla:rhino-xml:1.8.1"
-mozilla-rhino-tools = "org.mozilla:rhino-tools:1.8.1"
+mozilla-rhino = "org.mozilla:rhino:1.9.2"
+mozilla-rhino-xml = "org.mozilla:rhino-xml:1.9.2"
+mozilla-rhino-tools = "org.mozilla:rhino-tools:1.9.2"
 # opencv
 opencv = "org.opencv:opencv:4.12.0"
 # commons
@@ -88,11 +93,14 @@ ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "kto
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor-version" }
 # mlkit
 mlkit-common = { group = "com.google.mlkit", name = "common", version.ref = "mlkit-common-version" }
+mlkit-barcode-scanning = { group = "com.google.mlkit", name = "barcode-scanning", version.ref = "mlkit-barcode-scanning" }
 mlkit-text-recognition = { module = "com.google.mlkit:text-recognition", version.ref = "mlkit-text" }
 mlkit-text-recognition-chinese = { module = "com.google.mlkit:text-recognition-chinese", version.ref = "mlkit-text" }
 mlkit-text-recognition-devanagari = { module = "com.google.mlkit:text-recognition-devanagari", version.ref = "mlkit-text" }
 mlkit-text-recognition-japanese = { module = "com.google.mlkit:text-recognition-japanese", version.ref = "mlkit-text" }
 mlkit-text-recognition-korean = { module = "com.google.mlkit:text-recognition-korean", version.ref = "mlkit-text" }
+camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "camera" }
+tesseract4android-core = { module = "cz.adaptech.tesseract4android:tesseract4android", version.ref = "tesseract4android" }
 #rxjava
 quickie-bundled = { module = "io.github.g00fy2.quickie:quickie-bundled", version.ref = "quickie-bundled" }
 rxjava3 = "io.reactivex.rxjava3:rxjava:3.1.11"
@@ -138,6 +146,7 @@ mlkit = [
     "mlkit-text-recognition-chinese",
     "mlkit-text-recognition-devanagari",
     "mlkit-text-recognition-japanese",
-    "mlkit-text-recognition-korean"
+    "mlkit-text-recognition-korean",
+    "mlkit-barcode-scanning"
 ]
 shizuku = ["shizuku-api", "shizuku-provider"]

@@ -5,8 +5,6 @@ import java.util.Base64
 plugins {
     id("com.android.application")
     id("kotlin-android")
-    id("com.jakewharton.butterknife")
-    id("kotlin-kapt")//Deprecated!!
 }
 
 java {
@@ -168,6 +166,7 @@ dependencies {
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.mlkit.common)
+    implementation(libs.mlkit.barcode.scanning)
     androidTestImplementation(libs.compose.ui.test.junit4)
     debugImplementation(libs.compose.ui.tooling)
     implementation(libs.activity.compose)
@@ -176,9 +175,7 @@ dependencies {
     testImplementation(libs.junit)
     // Kotlin携程
     implementation(libs.kotlinx.coroutines.android)
-    // ButterKnife Deprecated!!
-    implementation("com.jakewharton:butterknife:10.2.1")
-    kapt("com.jakewharton:butterknife-compiler:10.2.3")
+
     // Android supports
     implementation(libs.preference.ktx)
     implementation(libs.appcompat) //

@@ -1,92 +1,75 @@
-package org.autojs.autojs.ui.edit;
+package org.autojs.autojs.ui.edit
 
-import android.content.Context;
-import androidx.annotation.NonNull;
-import android.view.View;
-import android.widget.SeekBar;
-import android.widget.TextView;
+import android.content.Context
+import android.view.LayoutInflater
+import android.view.View
+import android.widget.SeekBar
+import android.widget.TextView
+import com.afollestad.materialdialogs.MaterialDialog
+import org.autojs.autoxjs.R
+import org.autojs.autojs.theme.dialog.ThemeColorMaterialDialogBuilder
+import org.autojs.autoxjs.databinding.DialogTextSizeSettingBinding
 
-import com.afollestad.materialdialogs.MaterialDialog;
-import org.autojs.autoxjs.R;
-import org.autojs.autojs.theme.dialog.ThemeColorMaterialDialogBuilder;
+class TextSizeSettingDialogBuilder(context: Context) :
+    ThemeColorMaterialDialogBuilder(context),
+    SeekBar.OnSeekBarChangeListener {
 
-import butterknife.BindView;
-import butterknife.ButterKnife;
-
-/**
- * Created by Stardust on 2018/2/24.
- */
-
-public class TextSizeSettingDialogBuilder extends ThemeColorMaterialDialogBuilder implements SeekBar.OnSeekBarChangeListener {
-
-
-    public interface PositiveCallback {
-
-        void onPositive(int value);
+    interface PositiveCallback {
+        fun onPositive(value: Int)
     }
 
-    private static final int MIN = 2;
+    private val binding = DialogTextSizeSettingBinding.inflate(
+        LayoutInflater.from(context),
+        null,
+        false
+    )
 
-    @BindView(R.id.seekbar)
-    SeekBar mSeekBar;
+    private var textSize = 0
+    private var materialDialog: MaterialDialog? = null
 
-    @BindView(R.id.preview_text)
-    TextView mPreviewText;
-
-    private int mTextSize;
-    private MaterialDialog mMaterialDialog;
-
-    public TextSizeSettingDialogBuilder(@NonNull Context context) {
-        super(context);
-        View view = View.inflate(context, R.layout.dialog_text_size_setting, null);
-        customView(view, false);
-        title(R.string.text_text_size);
-        positiveText(R.string.ok);
-        negativeText(R.string.cancel);
-        ButterKnife.bind(this, view);
-        mSeekBar.setOnSeekBarChangeListener(this);
+    init {
+        customView(binding.root, false)
+        title(R.string.text_text_size)
+        positiveText(R.string.ok)
+        negativeText(R.string.cancel)
+        binding.seekbar.setOnSeekBarChangeListener(this)
     }
 
-    private void setTextSize(int textSize) {
-        mTextSize = textSize;
-        String title = getContext().getString(R.string.text_size_current_value, textSize);
-        if (mMaterialDialog != null) {
-            mMaterialDialog.setTitle(title);
+    private fun setTextSize(size: Int) {
+        textSize = size
+        val title = context.getString(R.string.text_size_current_value, size)
+        if (materialDialog != null) {
+            materialDialog?.setTitle(title)
         } else {
-            title(title);
+            title(title)
         }
-        mPreviewText.setTextSize(textSize);
+        binding.previewText.textSize = size.toFloat()
     }
 
-    public TextSizeSettingDialogBuilder initialValue(int value) {
-        mSeekBar.setProgress(value - MIN);
-        return this;
+    fun initialValue(value: Int): TextSizeSettingDialogBuilder {
+        binding.seekbar.progress = value - MIN
+        return this
     }
 
-    public TextSizeSettingDialogBuilder callback(PositiveCallback callback) {
-        onPositive((dialog, which) -> callback.onPositive(mTextSize));
-        return this;
+    fun callback(callback: PositiveCallback): TextSizeSettingDialogBuilder {
+        onPositive { _, _ -> callback.onPositive(textSize) }
+        return this
     }
 
-    @Override
-    public MaterialDialog build() {
-        mMaterialDialog = super.build();
-        return mMaterialDialog;
+    override fun build(): MaterialDialog {
+        materialDialog = super.build()
+        return materialDialog!!
     }
 
-
-    @Override
-    public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-        setTextSize(progress + MIN);
+    override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+        setTextSize(progress + MIN)
     }
 
-    @Override
-    public void onStartTrackingTouch(SeekBar seekBar) {
+    override fun onStartTrackingTouch(seekBar: SeekBar) {}
 
-    }
+    override fun onStopTrackingTouch(seekBar: SeekBar) {}
 
-    @Override
-    public void onStopTrackingTouch(SeekBar seekBar) {
-
+    companion object {
+        private const val MIN = 2
     }
 }
