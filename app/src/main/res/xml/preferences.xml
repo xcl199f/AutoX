@@ -110,6 +110,10 @@
             android:title="@string/text_change_script_dir" />
     </PreferenceCategory>
 
+    <Preference
+        android:layout="@layout/preference_custom"
+        android:title="@string/plugin_list_title" />
+
     <PreferenceCategory
         android:layout="@layout/preference_category_custom"
         android:title="@string/text_about">

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="plugin_list_title">插件</string>
+    <string name="plugin_list_empty">未发现已安装的插件\n\n插件以独立 APK 的形式安装，安装后会出现在这里。</string>
+    <string name="plugin_foreground_default_title">插件服务运行中</string>
+    <string name="plugin_foreground_channel_name">插件后台服务</string>
+    <string name="plugin_foreground_channel_desc">用于保持插件在后台持续运行</string>
+    <string name="plugin_action_settings">设置</string>
+    <string name="plugin_action_uninstall">卸载</string>
+    <string name="plugin_enable_failed">插件加载失败：%1$s</string>
+    <string name="plugin_version_format">%1$s · v%2$s</string>
+</resources>
