@@ -24,11 +24,13 @@ import com.stardust.autojs.core.pref.PrefKey
 import com.stardust.autojs.servicecomponents.EngineController
 import com.stardust.autojs.util.ProcessUtils
 import com.stardust.theme.ThemeColor
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.autojs.autojs.autojs.AutoJs
 import org.autojs.autojs.autojs.key.GlobalKeyObserver
 import org.autojs.autojs.external.receiver.DynamicBroadcastReceivers
+import org.autojs.autojs.plugin.PluginManager
 import org.autojs.autojs.theme.ThemeColorManagerCompat
 import org.autojs.autojs.timing.TimedTaskManager
 import org.autojs.autojs.timing.TimedTaskScheduler
@@ -87,6 +89,10 @@ class App : Application(), Configuration.Provider, ImageLoaderFactory {
             }
         } else if (ProcessUtils.isMainProcess(this)) {
             initResource()
+            PluginManager.init(this)
+            EngineController.scope.launch(Dispatchers.IO) {
+                PluginManager.restoreEnabledPlugins()
+            }
             EngineController.scope.launch {
                 delay(1000)
                 ShizukuProvider.requestBinderForNonProviderProcess(this@App)

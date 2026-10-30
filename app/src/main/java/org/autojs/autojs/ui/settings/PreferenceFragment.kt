@@ -13,6 +13,7 @@ import androidx.preference.SwitchPreference
 import com.stardust.pio.PFiles
 import de.psdev.licensesdialog.LicensesDialog
 import org.autojs.autojs.external.open.RunIntentActivity
+import org.autojs.autojs.plugin.PluginListActivity
 import org.autojs.autojs.ui.widget.CommonMarkdownView
 import org.autojs.autoxjs.R
 
@@ -32,6 +33,12 @@ class PreferenceFragment : PreferenceFragmentCompat() {
             }
             put(getString(R.string.text_licenses)) { showLicenseDialog(it) }
             put(getString(R.string.text_licenses_other)) { showLicenseDialog2(it) }
+            put(getString(R.string.plugin_list_title)) {
+                it.startActivity(
+                    Intent(it, PluginListActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }
         }
 
     }

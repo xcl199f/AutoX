@@ -202,6 +202,8 @@ dependencies {
     implementation("com.bignerdranch.android:expandablerecyclerview:3.0.0-RC1")
     //FlexibleDivider
     implementation("com.yqritc:recyclerview-flexibledivider:1.4.0")
+    // 插件列表
+    implementation("androidx.recyclerview:recyclerview:1.3.2")
 
     implementation(libs.rxjava3.rxandroid)
     // Retrofit
@@ -218,6 +220,7 @@ dependencies {
     implementation(project(":autojs"))
     implementation(project(":apkbuilder"))
     implementation(project(":codeeditor"))
+    implementation(project(":plugin-api"))
 
     // ViewModel
     implementation(libs.lifecycle.viewmodel.ktx)

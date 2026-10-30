@@ -22,6 +22,7 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" /> <!-- 非auto_js运行必需，不会主动申请，某些脚本可以自行申请 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" /> <!-- 插件代理前台服务 -->
     <uses-permission android:name="android.permission.ACCEPT_HANDOVER" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
@@ -91,6 +92,13 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
 
+
+    <!--  插件枚举：Android 11+ 需显式声明可查询的插件组件  -->
+    <queries>
+        <intent>
+            <action android:name="org.autojs.plugin.sdk.PLUGIN" />
+        </intent>
+    </queries>
 
     <application
         android:name="org.autojs.autojs.App"
@@ -373,6 +381,18 @@
                 android:value="androidx.startup"
                 tools:node="remove" />
         </provider>
+        <!--  插件代理前台服务：插件自身无法在宿主进程实例化 Service，统一由宿主代理  -->
+        <service
+            android:name="org.autojs.autojs.plugin.PluginHostService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!--  插件管理界面  -->
+        <activity
+            android:name="org.autojs.autojs.plugin.PluginListActivity"
+            android:exported="false"
+            android:label="@string/plugin_list_title" />
+
     </application>
 
 </manifest>
