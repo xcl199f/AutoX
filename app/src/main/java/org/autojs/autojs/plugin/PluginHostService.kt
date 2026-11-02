@@ -60,6 +60,20 @@ class PluginHostService : Service() {
         super.onDestroy()
     }
 
+    /**
+     * Android 15 (API 35) 起，dataSync / 媒体处理类前台服务在应用处于后台时
+     * 有运行时长限制。超限后系统回调本方法，服务必须在数秒内 stopSelf()，
+     * 否则抛出 ForegroundServiceDidNotStopInTimeException 直接崩溃应用。
+     *
+     * PluginHostService 只是插件的常驻代理（且实际运行在主进程，对真正需要
+     * 存活的 :script 进程插件没有 keep-alive 价值），因此超时后直接优雅退出。
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        Log.w(TAG, "foreground service timeout (type=$fgsType), stopping")
+        stopForegroundCompat()
+        stopSelf()
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun buildNotification(title: String, text: String): Notification =

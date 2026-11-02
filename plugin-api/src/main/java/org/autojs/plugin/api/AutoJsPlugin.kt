@@ -32,6 +32,26 @@ interface AutoJsPlugin {
     fun onDestroy() {}
 
     /**
+     * 声明本插件需要用户配置的项目。
+     *
+     * 宿主据此渲染设置界面，插件无需自带任何 Activity 或布局。
+     * 返回 [PluginConfigSpec.EMPTY] 表示该插件没有可配置项。
+     * 调用时宿主已执行过 [onCreate]，实现里可以安全使用 [onCreate] 保存的上下文。
+     */
+    fun configSpec(): PluginConfigSpec = PluginConfigSpec.EMPTY
+
+    /**
+     * 宿主界面回到前台时调用。
+     *
+     * 用于让「因空闲而主动休眠」的常驻插件有机会重新启动。典型场景：MCP 服务
+     * 长时间没有请求后停掉了 HTTP 监听，用户再次打开 AutoX 时据此恢复。
+     *
+     * 只在 [onEnable] 之后、[onDisable] 之前调用；插件若没有休眠逻辑，
+     * 保持默认的空实现即可（重复启动应当是幂等的）。
+     */
+    fun onHostForeground() {}
+
+    /**
      * 是否要求宿主维持一个前台服务，使插件能在后台常驻。
      *
      * 返回 true 时宿主会注册并拉起代理前台服务，插件可通过

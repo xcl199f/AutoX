@@ -1,6 +1,5 @@
 package org.autojs.autojs.plugin
 
-import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.TextView
@@ -30,6 +29,7 @@ class PluginListActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_plugin_list)
+        applySystemBarAppearance()
 
         val toolbar = findViewById<MaterialToolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
@@ -92,20 +92,7 @@ class PluginListActivity : AppCompatActivity() {
     }
 
     private fun openPluginSettings(meta: PluginMetaInfo) {
-        val component = meta.settingsComponent ?: return
-        runCatching {
-            startActivity(
-                Intent().apply {
-                    this.component = component
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-            )
-        }.onFailure {
-            Toast.makeText(
-                this,
-                getString(R.string.plugin_enable_failed, it.message.orEmpty()),
-                Toast.LENGTH_SHORT
-            ).show()
-        }
+        // 配置界面统一由宿主渲染，插件不需要自带 Activity。
+        startActivity(PluginConfigActivity.intent(this, meta.packageName))
     }
 }

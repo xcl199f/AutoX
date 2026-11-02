@@ -387,11 +387,25 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!--  插件运行期宿主：跑在 :script 进程，AutoJs 运行时只在该进程内可用  -->
+        <service
+            android:name="org.autojs.autojs.plugin.PluginRuntimeService"
+            android:exported="false"
+            android:process="@string/text_script_process_name" />
+
         <!--  插件管理界面  -->
         <activity
             android:name="org.autojs.autojs.plugin.PluginListActivity"
             android:exported="false"
             android:label="@string/plugin_list_title" />
+
+        <!--  由宿主按插件声明的 schema 动态渲染的插件配置界面  -->
+        <!--  单独指定 MaterialComponents 主题：TextInputLayout 依赖它，AppCompat 主题下会直接崩  -->
+        <activity
+            android:name="org.autojs.autojs.plugin.PluginConfigActivity"
+            android:exported="false"
+            android:label="@string/plugin_config_title"
+            android:theme="@style/PluginConfigTheme" />
 
     </application>
 

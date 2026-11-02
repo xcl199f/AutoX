@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!--
+        插件设置页专用主题。
+
+        原先沿用 AppTheme（Theme.AppCompat.DayNight），但 Material 的 TextInputLayout
+        要求 MaterialComponents 主题，否则构造时直接抛 IllegalArgumentException。
+        这里只给 PluginConfigActivity 换主题，应用其余界面不受影响；
+        用 DayNight 版本保持跟随系统深色模式的行为。
+    -->
+    <style name="PluginConfigTheme" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorSecondary">@color/colorPrimary</item>
+        <!-- 开关、按钮、输入框描边都取 colorAccent，统一成品牌色，避免默认蓝色和 teal 主题打架 -->
+        <item name="colorAccent">@color/colorPrimary</item>
+    </style>
+
+</resources>

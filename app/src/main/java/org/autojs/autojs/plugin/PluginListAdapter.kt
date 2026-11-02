@@ -60,11 +60,8 @@ class PluginListAdapter(
                 onToggle(meta, isChecked)
             }
 
-            itemView.setOnClickListener {
-                if (meta.settingsComponent != null) {
-                    onOpenSettings(meta)
-                }
-            }
+            // 配置界面由宿主按插件声明的 schema 渲染，任何插件都可进入
+            itemView.setOnClickListener { onOpenSettings(meta) }
         }
     }
 }

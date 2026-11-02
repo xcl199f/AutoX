@@ -44,6 +44,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -56,11 +57,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.edit
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.preference.PreferenceManager
 import coil.compose.rememberAsyncImagePainter
@@ -97,6 +101,8 @@ import org.autojs.autojs.devplugin.DevPlugin
 import org.autojs.autojs.tool.WifiTool
 import org.autojs.autojs.ui.floating.FloatyWindowManger
 import org.autojs.autojs.ui.main.drawer.DrawerViewModel
+import org.autojs.autojs.plugin.PluginListActivity
+import org.autojs.autojs.plugin.PluginManager
 import org.autojs.autojs.ui.settings.SettingsActivity
 import org.autojs.autoxjs.R
 
@@ -145,6 +151,7 @@ fun DrawerPage(drawerState: DrawerState) {
                 Text(text = stringResource(id = R.string.text_others), style = textStyle)
                 ConnectComputerSwitch()
                 USBDebugSwitch()
+                PluginEntry(drawerState = drawerState)
 
                 MemoryUsage()
                 SwitchTimedTaskScheduler()
@@ -904,6 +911,62 @@ private fun CheckForUpdate(model: DrawerViewModel = viewModel()) {
     }
 
     dialog.UpdateDialog(model)
+}
+
+@Composable
+private fun PluginEntry(drawerState: DrawerState) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var enabledCount by remember { mutableStateOf(0) }
+    var refreshKey by remember { mutableStateOf(0) }
+
+    // 抽屉打开时刷新
+    LaunchedEffect(drawerState.isOpen) {
+        if (drawerState.isOpen) refreshKey++
+    }
+    // 从插件管理页返回（Activity 重新 RESUMED）时也刷新，否则开关插件后数量不变
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) refreshKey++
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(refreshKey) {
+        enabledCount = withContext(Dispatchers.IO) {
+            runCatching {
+                PluginManager.installedPlugins().count { it.enabled }
+            }.getOrDefault(0)
+        }
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                context.startActivity(Intent(context, PluginListActivity::class.java))
+            }
+            .padding(vertical = 12.dp)
+            .padding(end = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = stringResource(R.string.plugin_list_title),
+            style = MaterialTheme.typography.titleMedium
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = stringResource(R.string.plugin_enabled_count_format, enabledCount),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null
+            )
+        }
+    }
 }
 
 @Composable

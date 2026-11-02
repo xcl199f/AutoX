@@ -78,11 +78,14 @@ class PluginRepository(private val context: Context) {
     }
 
     /**
-     * 插件可选地提供一个设置界面：声明了 action 的 Activity 中，
-     * 取第一个非入口组件作为设置页。
+     * 插件可选地提供一个自定义设置页：只有显式声明了
+     * [PluginContract.ACTION_SETTINGS] 的组件才会被识别。
+     *
+     * 注意不能复用 [PluginContract.ACTION_PLUGIN]——那个 action 只标记枚举入口，
+     * 指向的是无界面的占位组件，误当成设置页会拉起一个立刻结束的界面。
      */
     private fun resolveSettings(packageName: String): ComponentName? {
-        val intent = Intent(PluginContract.ACTION_PLUGIN).setPackage(packageName)
+        val intent = Intent(PluginContract.ACTION_SETTINGS).setPackage(packageName)
         val list = runCatching {
             packageManager.queryIntentActivities(intent, 0)
         }.getOrElse { emptyList() }

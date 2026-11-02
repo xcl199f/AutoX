@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    插件配置项的输入对话框内容。
+
+    EditTextPreference 会在这个布局里查找 @android:id/edit，因此输入框的 id
+    必须是 android.R.id.edit，否则 onBindDialogView 会抛异常。
+-->
+<com.google.android.material.textfield.TextInputLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/input_layout"
+    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="4dp"
+    app:boxCornerRadiusBottomEnd="12dp"
+    app:boxCornerRadiusBottomStart="12dp"
+    app:boxCornerRadiusTopEnd="12dp"
+    app:boxCornerRadiusTopStart="12dp"
+    app:boxStrokeWidth="1dp"
+    app:boxStrokeWidthFocused="2dp"
+    app:helperTextEnabled="true">
+
+    <com.google.android.material.textfield.TextInputEditText
+        android:id="@android:id/edit"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:textSize="16sp" />
+
+</com.google.android.material.textfield.TextInputLayout>

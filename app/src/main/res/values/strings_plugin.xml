@@ -9,4 +9,18 @@
     <string name="plugin_action_uninstall">卸载</string>
     <string name="plugin_enable_failed">插件加载失败：%1$s</string>
     <string name="plugin_version_format">%1$s · v%2$s</string>
+    <string name="plugin_item_open_settings">点按进入设置 ›</string>
+    <string name="plugin_enabled_count_format">已启用 %1$d 个</string>
+
+    <string name="plugin_config_title">插件设置</string>
+    <string name="plugin_config_empty">该插件没有可配置项</string>
+    <string name="plugin_config_open_custom">打开插件自带设置</string>
+    <string name="plugin_config_custom_unavailable">无法打开插件的设置界面</string>
+    <string name="plugin_config_load_failed">插件加载失败：%1$s</string>
+    <string name="plugin_config_required">此项不能为空</string>
+    <string name="plugin_config_secret_set">已设置</string>
+    <string name="plugin_config_number_range">请输入 %1$d - %2$d 之间的整数</string>
+    <string name="plugin_config_number_min">不能小于 %1$d</string>
+    <string name="plugin_config_number_max">不能大于 %1$d</string>
+    <string name="plugin_config_number_invalid">请输入有效的整数</string>
 </resources>

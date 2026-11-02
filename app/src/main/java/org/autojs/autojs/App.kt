@@ -1,9 +1,12 @@
 package org.autojs.autojs
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.app.Application
+import android.app.Application.ActivityLifecycleCallbacks
 import android.content.Intent
 import android.os.Build
+import android.os.Bundle
 import android.os.Process
 import android.util.Log
 import android.webkit.WebView
@@ -31,6 +34,7 @@ import org.autojs.autojs.autojs.AutoJs
 import org.autojs.autojs.autojs.key.GlobalKeyObserver
 import org.autojs.autojs.external.receiver.DynamicBroadcastReceivers
 import org.autojs.autojs.plugin.PluginManager
+import org.autojs.autojs.plugin.PluginRuntimeService
 import org.autojs.autojs.theme.ThemeColorManagerCompat
 import org.autojs.autojs.timing.TimedTaskManager
 import org.autojs.autojs.timing.TimedTaskScheduler
@@ -90,6 +94,7 @@ class App : Application(), Configuration.Provider, ImageLoaderFactory {
         } else if (ProcessUtils.isMainProcess(this)) {
             initResource()
             PluginManager.init(this)
+            registerHostForegroundNotifier()
             EngineController.scope.launch(Dispatchers.IO) {
                 PluginManager.restoreEnabledPlugins()
             }
@@ -102,6 +107,27 @@ class App : Application(), Configuration.Provider, ImageLoaderFactory {
         Log.i(
             TAG, "Pid: ${Process.myPid()}, isScriptProcess: ${ProcessUtils.isScriptProcess(this)}"
         )
+    }
+
+    /**
+     * 任意界面回到前台时通知 `:script` 进程，让因空闲休眠的常驻插件（如 MCP）恢复。
+     *
+     * 放在 Application 级而不是单个 Activity，是因为用户可能停在插件列表、
+     * 编辑器等任意界面——那些场景同样意味着「人在用 AutoX」。
+     */
+    private fun registerHostForegroundNotifier() {
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            override fun onActivityResumed(activity: Activity) {
+                PluginRuntimeService.notifyHostForeground(activity)
+            }
+
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
+            override fun onActivityStarted(activity: Activity) = Unit
+            override fun onActivityPaused(activity: Activity) = Unit
+            override fun onActivityStopped(activity: Activity) = Unit
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+            override fun onActivityDestroyed(activity: Activity) = Unit
+        })
     }
 
     private fun initLanguage() {
