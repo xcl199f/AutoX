@@ -4,11 +4,12 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.os.Build
 import android.os.Environment
-import androidx.preference.PreferenceManager
 import org.autojs.autoxjs.mcp.McpResponse
 import org.autojs.autoxjs.mcp.tool.McpTool
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.stardust.autojs.AutoJs
+import com.stardust.autojs.core.console.LogEntry
 import com.stardust.autojs.execution.ScriptExecution
 import com.stardust.autojs.servicecomponents.BinderScriptListener
 import com.stardust.autojs.servicecomponents.EngineController
@@ -223,6 +224,75 @@ class LogsTool(
     override suspend fun handle(params: JsonObject?): McpResponse {
         val recent = params?.get("recent")?.asInt ?: 20
         return McpResponse.ok(tracker.recent(recent))
+    }
+}
+
+/**
+ * 读取 AutoX 控制台里脚本真正打印出来的输出（console.log / print / toast 等）。
+ *
+ * 与 [LogsTool] 的区别：LogsTool 读的是任务状态（JobTracker，只有
+ * SUBMITTED/RUNNING/SUCCESS/FAILED 与 started/completed），本工具读的是
+ * `globalConsole.allLogs` 里的文本行（最多 5000 行，源头在 :script 进程）。
+ *
+ * 注意：`AutoJs.instance` 只在 :script 进程初始化，因此本工具只能在具备运行时
+ * 的进程内使用；若未初始化会返回 NotReady，而不是崩溃。
+ */
+class ConsoleLogsTool : McpTool {
+    override suspend fun handle(params: JsonObject?): McpResponse {
+        val console = try {
+            AutoJs.instance.globalConsole
+        } catch (e: UninitializedPropertyAccessException) {
+            return McpResponse.error(
+                "NotReady",
+                "AutoJs is not initialized (pid=${android.os.Process.myPid()})"
+            )
+        }
+        // 快照一次，避免和 ConsoleImpl 的写入并发
+        val snapshot: List<LogEntry> = synchronized(console.allLogs) { console.allLogs.toList() }
+        val firstId = snapshot.firstOrNull()?.id
+        val lastId = snapshot.lastOrNull()?.id
+
+        val sinceId = params?.get("sinceId")
+            ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }
+            ?.asInt
+        val recent = params?.get("recent")?.asInt ?: 100
+
+        val selected: List<LogEntry>
+        var dropped = false
+        var restarted = false
+        val nextCursor: Int
+        if (sinceId != null) {
+            // 进程重启会让 id 归零，此时游标比最新 id 还大，视为失效并退回全部
+            restarted = lastId != null && sinceId > lastId
+            if (restarted) {
+                selected = snapshot
+                nextCursor = lastId ?: sinceId
+            } else {
+                // sinceId 早于当前最旧 id-1，说明中间有行被环形缓冲淘汰
+                dropped = firstId != null && sinceId < firstId - 1
+                selected = snapshot.filter { it.id > sinceId }
+                nextCursor = lastId ?: sinceId
+            }
+        } else {
+            val limit = recent.coerceAtLeast(0)
+            selected = if (limit == 0) emptyList() else snapshot.takeLast(limit)
+            nextCursor = lastId ?: 0
+        }
+
+        val logs = selected.map {
+            mapOf("id" to it.id, "level" to it.level, "content" to it.content)
+        }
+        return McpResponse.ok(
+            mapOf(
+                "count" to logs.size,
+                "logs" to logs,
+                "nextCursor" to nextCursor,
+                "firstId" to firstId,
+                "lastId" to lastId,
+                "dropped" to dropped,
+                "restarted" to restarted
+            )
+        )
     }
 }
 
@@ -780,7 +850,12 @@ class NotImplementedTool(private val name: String) : McpTool {
 }
 
 private fun getScriptDirPath(context: Context): String {
-    val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+    // 与 androidx.preference.PreferenceManager.getDefaultSharedPreferences 等价，
+    // 但避免为读一个值而让插件依赖整个 preference 库。
+    val prefs = context.getSharedPreferences(
+        context.packageName + "_preferences",
+        Context.MODE_PRIVATE
+    )
     val configured = prefs.getString("key_script_dir_path", null)
     val fallback = getStringResource(context, "default_value_script_dir_path") ?: "/scripts/"
     val dir = configured?.takeIf { it.isNotBlank() } ?: fallback

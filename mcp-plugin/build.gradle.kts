@@ -32,6 +32,7 @@ android {
             isMinifyEnabled = false
             // 插件以独立 APK 安装，release 沿用 debug 签名以便本地安装验证
             signingConfig = signingConfigs.getByName("debug")
+            isDebuggable = false
         }
     }
 
@@ -54,11 +55,38 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.google.gson)
     implementation(libs.bundles.ktor)
-    implementation(libs.appcompat)
+    // 插件不自带界面，因此不依赖 appcompat / preference
     implementation(libs.core.ktx)
-    implementation(libs.preference.ktx)
 
     testImplementation(libs.junit)
+    // 单测要构造 PluginConfigHost 的桩实现，而主源码集只声明了 compileOnly
+    testImplementation(project(":plugin-api"))
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.espresso.core)
+}
+
+// compileOnly 引入的宿主依赖只用于编译期取签名，插件不会打包宿主代码。
+// 但 AGP 的 consistent resolution 会把 compileClasspath 严格锁定在 runtimeClasspath
+// 解析出的版本，而宿主依赖图（经 :common 的 Compose）带来的是更高版本，
+// 两者无法同时满足时编译类路径会整体解析失败，并让 processReleaseResources
+// 抛出一个被 Gradle 吞掉真实原因的 NPE（Cannot invoke "java.util.List.get(int)"）。
+// 这里把宿主侧较高的版本强制对齐过来，保证编译类路径可解析。
+// 若日后升级依赖后再次出现该 NPE，按 memory/2026-10-30.md 里的探针方法列出冲突坐标再补到这里。
+configurations.configureEach {
+    resolutionStrategy {
+        force(
+            "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3",
+            "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3",
+            "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.7.3",
+            "org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.7.3",
+            "org.jetbrains.kotlinx:kotlinx-coroutines-bom:1.7.3",
+            "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.20",
+            "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.20",
+            "org.jetbrains:annotations:23.0.0",
+            "androidx.annotation:annotation:1.8.1",
+            "androidx.annotation:annotation-jvm:1.8.1",
+            "androidx.lifecycle:lifecycle-runtime:2.8.3",
+            "androidx.lifecycle:lifecycle-common:2.8.3",
+        )
+    }
 }

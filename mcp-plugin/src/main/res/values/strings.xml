@@ -6,7 +6,6 @@
     <string name="mcp_notification_title">MCP 服务运行中</string>
     <string name="mcp_notification_text">LLM 工具已在配置的地址上可用</string>
 
-    <string name="mcp_settings_title">MCP 服务设置</string>
     <string name="mcp_settings_enable_title">启用 MCP 服务</string>
     <string name="mcp_settings_enable_summary">开启后由 AutoX 保持后台服务</string>
     <string name="mcp_settings_host_title">监听地址</string>
@@ -14,10 +13,15 @@
     <string name="mcp_settings_port_title">监听端口</string>
     <string name="mcp_settings_token_title">访问令牌</string>
     <string name="mcp_settings_token_summary">留空表示不校验，建议在局域网环境下设置</string>
-    <string name="mcp_settings_allow_base64_title">允许返回 Base64 图像</string>
-    <string name="mcp_settings_allow_base64_summary">关闭时截图类工具仅返回文件路径</string>
+    <string name="mcp_settings_token_placeholder">留空则不校验</string>
+    <string name="mcp_settings_allow_base64_title">允许内联返回图像</string>
+    <string name="mcp_settings_allow_base64_summary">关闭时截图类工具仅返回文件路径与下载地址；开启后可用 inline=true 让图像以 image 内容块直接返回</string>
     <string name="mcp_settings_allow_network_title">允许局域网访问</string>
     <string name="mcp_settings_allow_network_summary">关闭后强制只监听 127.0.0.1</string>
+    <string name="mcp_settings_idle_shutdown_title">长时间未使用自动休眠</string>
+    <string name="mcp_settings_idle_shutdown_summary">空闲超时后停掉 HTTP 监听，释放端口与线程；打开 AutoX 时自动恢复，休眠期间 AI 无法连接</string>
+    <string name="mcp_settings_idle_minutes_title">空闲时长（分钟）</string>
+    <string name="mcp_settings_idle_minutes_summary">超过该时长没有任何请求就进入休眠</string>
     <string name="mcp_settings_category_server">服务</string>
     <string name="mcp_settings_category_security">安全</string>
 </resources>

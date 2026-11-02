@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Build
 import android.os.SystemClock
+import android.util.Base64
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.stardust.autojs.core.accessibility.UiSelector
@@ -19,8 +20,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.autojs.autoxjs.mcp.McpConfig
+import org.autojs.autoxjs.mcp.McpImage
 import org.autojs.autoxjs.mcp.McpResponse
 import org.autojs.autoxjs.mcp.McpRuntimeProvider
+import org.autojs.autoxjs.mcp.McpUrls
 import org.autojs.autoxjs.mcp.ScreenshotInfo
 import org.autojs.autoxjs.mcp.ScreenshotStore
 import org.autojs.autoxjs.mcp.tool.McpTool
@@ -34,6 +37,10 @@ data class McpToolContext(
     val appContext: Context,
     val runtimeProvider: McpRuntimeProvider,
     val screenshotStore: ScreenshotStore,
+    /** 服务根地址，用于把设备端文件路径拼成 PC 可下载的 URL。 */
+    val baseUrlProvider: () -> String,
+    /** 重启插件运行时进程（`:script`），用于让更新后的插件 APK 生效。 */
+    val restartProvider: () -> Unit,
     val configProvider: () -> McpConfig
 )
 
@@ -54,8 +61,30 @@ data class FindElementsRequest(
     val timeoutMillis: Long? = 2000,
     val limit: Int? = 20
 )
-data class ScreenshotRequest(val asBase64: Boolean? = false)
-data class GetRecentScreenshotRequest(val asBase64: Boolean? = false)
+/**
+ * 截图参数。
+ *
+ * `inline`（旧名 `asBase64`，保留兼容）为 true 时，图像以标准 MCP `image` 内容块返回，
+ * 而不是把 base64 塞进文本 JSON——后者每个字符几乎都占一个 token，代价高 4 倍以上。
+ * `maxDimension` 控制内联图的长边像素（默认 720；传 0 表示不缩放，按原图返回）。
+ */
+data class ScreenshotRequest(
+    val asBase64: Boolean? = null,
+    val inline: Boolean? = null,
+    val maxDimension: Int? = null
+) {
+    val wantsInline: Boolean get() = (inline ?: asBase64) == true
+    val inlineMaxDimension: Int get() = normalizeInlineMaxDimension(maxDimension)
+}
+
+data class GetRecentScreenshotRequest(
+    val asBase64: Boolean? = null,
+    val inline: Boolean? = null,
+    val maxDimension: Int? = null
+) {
+    val wantsInline: Boolean get() = (inline ?: asBase64) == true
+    val inlineMaxDimension: Int get() = normalizeInlineMaxDimension(maxDimension)
+}
 data class OcrRequest(val source: String? = null, val path: String? = null, val language: String? = "zh")
 data class AppControlRequest(val action: String, val packageName: String)
 
@@ -232,26 +261,11 @@ class ScreenshotTool(private val ctx: McpToolContext) : McpTool {
                 timestamp = System.currentTimeMillis()
             )
             ctx.screenshotStore.update(info)
-            val data = if (req.asBase64 == true) {
-                if (!ctx.configProvider().allowBase64) {
-                    return McpResponse.error("Forbidden", "base64 disabled by config")
-                }
-                mapOf(
-                    "path" to info.path,
-                    "width" to info.width,
-                    "height" to info.height,
-                    "timestamp" to info.timestamp,
-                    "base64" to imageToBase64(captured)
-                )
-            } else {
-                mapOf(
-                    "path" to info.path,
-                    "width" to info.width,
-                    "height" to info.height,
-                    "timestamp" to info.timestamp
-                )
+            val data = screenshotData(ctx, info)
+            val images = inlineImages(ctx, req.wantsInline, req.inlineMaxDimension, data) {
+                encodeInlineImage(captured, req.inlineMaxDimension)
             }
-            McpResponse.ok(data)
+            McpResponse.ok(data, images)
         } catch (e: Exception) {
             McpResponse.error("Failed", e.message ?: "screenshot failed")
         } finally {
@@ -283,31 +297,28 @@ class GetRecentScreenshotTool(private val ctx: McpToolContext) : McpTool {
                 return McpResponse.error("Failed", e.message ?: "screenshot failed")
             }
         }
-        val data = mutableMapOf<String, Any>(
-            "path" to info.path,
-            "width" to info.width,
-            "height" to info.height,
-            "timestamp" to info.timestamp
-        )
-        if (req.asBase64 == true) {
-            if (!ctx.configProvider().allowBase64) {
-                captured?.recycle()
-                return McpResponse.error("Forbidden", "base64 disabled by config")
+        return try {
+            val data = screenshotData(ctx, info)
+            val images = inlineImages(ctx, req.wantsInline, req.inlineMaxDimension, data) {
+                if (captured != null) {
+                    encodeInlineImage(captured, req.inlineMaxDimension)
+                } else {
+                    val bitmap = BitmapFactory.decodeFile(info.path)
+                        ?: throw IllegalStateException("image decode failed")
+                    val loaded = ImageWrapper.ofBitmap(bitmap)
+                    try {
+                        encodeInlineImage(loaded, req.inlineMaxDimension)
+                    } finally {
+                        loaded.recycle()
+                    }
+                }
             }
-            val base64 = if (captured != null) {
-                imageToBase64(captured)
-            } else {
-                val bitmap = BitmapFactory.decodeFile(info.path)
-                    ?: return McpResponse.error("Failed", "image decode failed")
-                val image = ImageWrapper.ofBitmap(bitmap)
-                val encoded = imageToBase64(image)
-                image.recycle()
-                encoded
-            }
-            data["base64"] = base64
+            McpResponse.ok(data, images)
+        } catch (e: Exception) {
+            McpResponse.error("Failed", e.message ?: "screenshot failed")
+        } finally {
+            captured?.recycle()
         }
-        captured?.recycle()
-        return McpResponse.ok(data)
     }
 }
 
@@ -367,6 +378,30 @@ class AppControlTool(private val ctx: McpToolContext) : McpTool {
                 )
             }
             else -> McpResponse.error("BadRequest", "unsupported action")
+        }
+    }
+}
+
+/**
+ * 重启插件运行时进程，让更新后的插件 APK 生效。
+ *
+ * 走的是「结束 `:script` 进程 + 宿主自动重建」而不是热重载实例：
+ * 热重载会留下旧 ktor engine 占用端口，导致新实例绑不上、请求仍被旧代码处理。
+ * 结束进程能彻底释放资源，代价是本进程内正在跑的脚本会中断、无障碍需重连。
+ */
+class RestartMcpTool(private val ctx: McpToolContext) : McpTool {
+    override suspend fun handle(params: JsonObject?): McpResponse {
+        return try {
+            ctx.restartProvider()
+            McpResponse.ok(
+                mapOf(
+                    "ok" to true,
+                    "message" to "运行时进程将在约 0.6 秒后重启，MCP 服务会中断数秒后自动恢复；" +
+                        "正在运行的脚本会中断，无需手动重开宿主。"
+                )
+            )
+        } catch (e: Exception) {
+            McpResponse.error("Failed", e.message ?: "restart failed")
         }
     }
 }
@@ -518,14 +553,92 @@ private suspend fun saveImage(context: Context, image: ImageWrapper): File = wit
     file
 }
 
-private fun imageToBase64(image: ImageWrapper): String {
+/**
+ * 截图结果的公共字段。
+ *
+ * `path` 是设备端私有缓存路径，PC 侧读不到；`url` 是配合 `/files/{name}` 路由给出的
+ * HTTP 下载地址，客户端可直接下载，无需开启 base64。
+ */
+private fun screenshotData(ctx: McpToolContext, info: ScreenshotInfo): MutableMap<String, Any> {
+    val data = mutableMapOf<String, Any>(
+        "path" to info.path,
+        "width" to info.width,
+        "height" to info.height,
+        "timestamp" to info.timestamp
+    )
+    McpUrls.fileUrl(ctx.baseUrlProvider(), info.path)?.let { data["url"] = it }
+    return data
+}
+
+/** 内联图像的编码结果；width/height 是缩放后的实际像素，用于让 AI 知道图被压缩到什么程度。 */
+private data class EncodedImage(
+    val base64: String,
+    val mimeType: String,
+    val width: Int,
+    val height: Int
+)
+
+private fun encodeInlineImage(image: ImageWrapper, maxDimension: Int): EncodedImage {
     val output = ByteArrayOutputStream()
     val source = image.bitmap
-    val scaled = scaleBitmapIfNeeded(source, BASE64_MAX_DIMENSION)
+    val scaled = scaleBitmapIfNeeded(source, maxDimension)
     val target = scaled ?: source
-    target.compress(Bitmap.CompressFormat.JPEG, BASE64_JPEG_QUALITY, output)
-    scaled?.recycle()
-    return android.util.Base64.encodeToString(output.toByteArray(), android.util.Base64.NO_WRAP)
+    val encoded = try {
+        target.compress(Bitmap.CompressFormat.JPEG, INLINE_JPEG_QUALITY, output)
+        EncodedImage(
+            base64 = Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP),
+            mimeType = "image/jpeg",
+            width = target.width,
+            height = target.height
+        )
+    } finally {
+        scaled?.recycle()
+    }
+    return encoded
+}
+
+private fun inlineMeta(encoded: EncodedImage): Map<String, Any> = mapOf(
+    "mimeType" to encoded.mimeType,
+    "width" to encoded.width,
+    "height" to encoded.height
+)
+
+/**
+ * 按配置决定是否把图像内联成 image 内容块。
+ *
+ * 服务端关掉「允许内联返回图像」时不报错，而是降级为只返回 url：
+ * 调用方传了 inline 也不会因此失败，拿到的 url 照样能取到图，
+ * 只是多一次下载。这样 AI 侧的调用逻辑不需要感知这个开关。
+ */
+private inline fun inlineImages(
+    ctx: McpToolContext,
+    wantsInline: Boolean,
+    maxDimension: Int,
+    data: MutableMap<String, Any>,
+    encode: () -> EncodedImage
+): List<McpImage> {
+    if (!wantsInline) {
+        return emptyList()
+    }
+    if (!ctx.configProvider().allowBase64) {
+        data["inline"] = mapOf(
+            "skipped" to true,
+            "reason" to "inline image disabled by config; fetch 'url' instead"
+        )
+        return emptyList()
+    }
+    val encoded = encode()
+    data["inline"] = inlineMeta(encoded)
+    return listOf(McpImage(encoded.base64, encoded.mimeType))
+}
+
+private fun normalizeInlineMaxDimension(requested: Int?): Int {
+    val value = requested ?: DEFAULT_INLINE_MAX_DIMENSION
+    // <=0 表示不缩放，按原图内联（token 成本高，仅调试用）。
+    if (value <= 0) {
+        return Int.MAX_VALUE
+    }
+    return value.coerceIn(MIN_INLINE_MAX_DIMENSION, MAX_INLINE_MAX_DIMENSION)
 }
 
 private fun scaleBitmapIfNeeded(source: Bitmap, maxDimension: Int): Bitmap? {
@@ -541,5 +654,8 @@ private fun scaleBitmapIfNeeded(source: Bitmap, maxDimension: Int): Bitmap? {
     return Bitmap.createScaledBitmap(source, targetWidth, targetHeight, true)
 }
 
-private const val BASE64_MAX_DIMENSION = 720
-private const val BASE64_JPEG_QUALITY = 70
+/** 默认长边 720：1080×2400 的截图会变成 324×720，约 311 token。 */
+private const val DEFAULT_INLINE_MAX_DIMENSION = 720
+private const val MIN_INLINE_MAX_DIMENSION = 200
+private const val MAX_INLINE_MAX_DIMENSION = 4096
+private const val INLINE_JPEG_QUALITY = 70

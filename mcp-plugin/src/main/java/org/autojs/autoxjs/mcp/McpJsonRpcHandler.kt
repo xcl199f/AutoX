@@ -26,6 +26,7 @@ data class RpcHttpResponse(
 class McpJsonRpcHandler(
     private val registry: ToolRegistry,
     private val serverInfoProvider: () -> McpServerInfo,
+    private val instructionsProvider: () -> String? = { null },
     private val protocolVersion: String = PROTOCOL_VERSION
 ) {
     private val gson = Gson()
@@ -120,6 +121,11 @@ class McpJsonRpcHandler(
                 info.version?.let { addProperty("version", it) }
                 info.description?.let { addProperty("description", it) }
             })
+            // MCP 规范中的服务级使用须知：客户端（如 Claude Desktop）会把它注入模型上下文，
+            // 用来告诉 AI 本服务的前置条件、工具能力与已知坑。
+            instructionsProvider()?.takeIf { it.isNotBlank() }?.let {
+                addProperty("instructions", it)
+            }
         }
         return successResponse(id, result)
     }
@@ -153,6 +159,16 @@ class McpJsonRpcHandler(
         val response = registry.invoke(name, args)
         Log.i(TAG, "tools/call id=$id name=$name ok=${response.ok} error=${response.errorCode}")
         val content = JsonArray()
+        // 图像块放前面：客户端渲染顺序与 content 顺序一致，让模型先看到图再看元数据。
+        if (response.ok) {
+            response.images.forEach { image ->
+                content.add(JsonObject().apply {
+                    addProperty("type", "image")
+                    addProperty("data", image.data)
+                    addProperty("mimeType", image.mimeType)
+                })
+            }
+        }
         val text = if (response.ok) {
             response.data?.let { data ->
                 if (data is String) data else gson.toJson(data)

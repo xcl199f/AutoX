@@ -201,8 +201,11 @@ class McpSelfHealthSupervisorTest {
         assertTrue(isSameDeviceRemoteAddress("fe80::1234%wlan0", localAddresses))
         assertFalse(isSameDeviceRemoteAddress("192.168.1.13", localAddresses))
         assertFalse(isSameDeviceRemoteAddress("fe80::5678%wlan0", localAddresses))
-        assertFalse(isSameDeviceRemoteAddress("localhost", localAddresses))
+        // CIO 引擎的 remoteHost 取自 InetSocketAddress.getHostName()，本机回环对端会被反解成 localhost，
+        // 因此回环别名必须放行，否则自检探针会被 /healthz 拒绝。
+        assertTrue(isSameDeviceRemoteAddress("localhost", localAddresses))
         assertFalse(isSameDeviceRemoteAddress("example.com", localAddresses))
+        assertFalse(isSameDeviceRemoteAddress("unknown", localAddresses))
     }
 
     @Test

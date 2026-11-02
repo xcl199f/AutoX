@@ -14,6 +14,7 @@ import org.autojs.autoxjs.mcp.tool.ToolRegistry
 import org.autojs.autoxjs.mcp.tool.ToolSchemas
 import org.autojs.autoxjs.mcp.tools.AppControlTool
 import org.autojs.autoxjs.mcp.tools.CancelJobTool
+import org.autojs.autoxjs.mcp.tools.ConsoleLogsTool
 import org.autojs.autoxjs.mcp.tools.DeleteScriptTool
 import org.autojs.autoxjs.mcp.tools.DeviceInfoTool
 import org.autojs.autoxjs.mcp.tools.FindElementTool
@@ -34,6 +35,7 @@ import org.autojs.autoxjs.mcp.tools.OcrTool
 import org.autojs.autoxjs.mcp.tools.ReadSampleTool
 import org.autojs.autoxjs.mcp.tools.ReadScriptTool
 import org.autojs.autoxjs.mcp.tools.RenameScriptTool
+import org.autojs.autoxjs.mcp.tools.RestartMcpTool
 import org.autojs.autoxjs.mcp.tools.RunScriptTool
 import org.autojs.autoxjs.mcp.tools.RunScriptFileTool
 import org.autojs.autoxjs.mcp.tools.SaveScriptTool
@@ -47,12 +49,22 @@ import org.autojs.autoxjs.mcp.tools.UpdateScriptTool
  */
 class McpService internal constructor(
     private val context: Context,
+    private val restart: () -> Unit,
     private val healthSupervisor: McpSelfHealthSupervisor,
     private val healthProbe: McpHealthProbe,
     private val probeIntervalMillis: Long
 ) {
     constructor(context: Context) : this(
         context = context,
+        restart = {},
+        healthSupervisor = McpHealthStatus.runtime(),
+        healthProbe = McpLocalHealthProbe(),
+        probeIntervalMillis = SELF_PROBE_INTERVAL_MILLIS
+    )
+
+    constructor(context: Context, restart: () -> Unit) : this(
+        context = context,
+        restart = restart,
         healthSupervisor = McpHealthStatus.runtime(),
         healthProbe = McpLocalHealthProbe(),
         probeIntervalMillis = SELF_PROBE_INTERVAL_MILLIS
@@ -67,13 +79,24 @@ class McpService internal constructor(
     private val toolContext = McpToolContext(
         appContext = context.applicationContext,
         runtimeProvider = runtimeProvider,
-        screenshotStore = screenshotStore
+        screenshotStore = screenshotStore,
+        baseUrlProvider = { McpUrls.baseUrl(currentConfig) },
+        restartProvider = { restart() }
     ) { currentConfig }
     private var server: McpServer? = null
     private var activeConfig: McpConfig? = null
     private val healthScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var healthProbeJob: Job? = null
     private var healthSessionStarted = false
+    private var idleWatchJob: Job? = null
+
+    /**
+     * 因空闲而停掉监听时保存的配置，用于 [resumeFromIdle] 恢复。
+     *
+     * 为 null 表示当前不是「空闲休眠」状态。
+     */
+    @Volatile
+    private var idleSleepConfig: McpConfig? = null
 
     init {
         registerDefaultTools()
@@ -86,6 +109,7 @@ class McpService internal constructor(
             stop()
             return false
         }
+        idleSleepConfig = null
         if (!healthSessionStarted) {
             healthSupervisor.startSession()
             healthSessionStarted = true
@@ -95,6 +119,7 @@ class McpService internal constructor(
         }
         if (activeConfig == config && server?.isRunning == true) {
             ensureHealthProbeLoop()
+            ensureIdleWatchLoop()
             return true
         }
         // Keep the desired config after a bind failure so the probe loop can retry only Ktor.
@@ -106,6 +131,7 @@ class McpService internal constructor(
             Log.e(TAG, "MCP service failed to start")
         }
         ensureHealthProbeLoop()
+        ensureIdleWatchLoop()
         return started
     }
 
@@ -113,6 +139,9 @@ class McpService internal constructor(
     fun stop() {
         healthProbeJob?.cancel()
         healthProbeJob = null
+        idleWatchJob?.cancel()
+        idleWatchJob = null
+        idleSleepConfig = null
         server?.stop()
         server = null
         activeConfig = null
@@ -120,6 +149,67 @@ class McpService internal constructor(
         healthSessionStarted = false
         runtimeProvider.close()
         Log.i(TAG, "MCP service stopped")
+    }
+
+    /**
+     * 从空闲休眠中恢复监听。
+     *
+     * 返回 true 表示确实有一个休眠中的服务被重新拉起；没有休眠时返回 false，
+     * 调用方无需处理。宿主在界面回到前台时调用。
+     */
+    @Synchronized
+    fun resumeFromIdle(): Boolean {
+        val config = idleSleepConfig ?: return false
+        Log.i(TAG, "resuming MCP server from idle sleep")
+        idleSleepConfig = null
+        return start(config)
+    }
+
+    /** 当前是否处于空闲休眠（监听已停止，等待唤醒）。 */
+    val isIdleSleeping: Boolean
+        get() = idleSleepConfig != null
+
+    private fun ensureIdleWatchLoop() {
+        if (idleWatchJob?.isActive == true) {
+            return
+        }
+        idleWatchJob = healthScope.launch {
+            while (isActive) {
+                delay(IDLE_CHECK_INTERVAL_MILLIS)
+                runCatching { enterIdleSleepIfNeeded() }
+                    .onFailure { Log.w(TAG, "idle check failed", it) }
+            }
+        }
+    }
+
+    /**
+     * 检查是否该进入空闲休眠。
+     *
+     * 只停 Ktor 引擎，保留 [runtimeProvider] 等对象：恢复时不必重新初始化运行时，
+     * 唤醒耗时更短。
+     */
+    private fun enterIdleSleepIfNeeded() {
+        synchronized(this) {
+            val config = activeConfig ?: return
+            if (!config.idleShutdown) {
+                return
+            }
+            val running = server ?: return
+            val idleMillis = System.currentTimeMillis() - running.lastActivityAt
+            val limitMillis = config.idleMinutes * 60_000L
+            if (idleMillis < limitMillis) {
+                return
+            }
+            Log.i(TAG, "idle for ${idleMillis / 1000}s (limit ${config.idleMinutes}min), stopping listener")
+            healthProbeJob?.cancel()
+            healthProbeJob = null
+            running.stop()
+            server = null
+            activeConfig = null
+            healthSupervisor.stopSession()
+            healthSessionStarted = false
+            idleSleepConfig = config
+        }
     }
 
     private fun ensureHealthProbeLoop() {
@@ -247,6 +337,36 @@ class McpService internal constructor(
                     )
                 ),
                 LogsTool(tracker)
+            )
+            register(
+                ToolDefinition(
+                    name = "console_logs",
+                    title = "Console Logs",
+                    description = "Read script console output (console.log/print) from the AutoX global console. " +
+                        "First call with {recent:N} for context and note nextCursor; then call with {sinceId:nextCursor} " +
+                        "after each run to fetch only new lines. Response includes nextCursor, firstId, lastId, " +
+                        "dropped (lines evicted before cursor), restarted (process restarted, cursor reset).",
+                    inputSchema = ToolSchemas.objectSchema(
+                        mapOf(
+                            "recent" to ToolSchemas.intSchema("Return the last N lines (default 100). Use on first call."),
+                            "sinceId" to ToolSchemas.intSchema("Only return lines with id > sinceId. Pass the previous nextCursor.")
+                        ),
+                        required = emptyList()
+                    )
+                ),
+                ConsoleLogsTool()
+            )
+            register(
+                ToolDefinition(
+                    name = "restart_mcp",
+                    title = "Restart MCP Runtime",
+                    description = "Restart the plugin runtime process (:script) so the latest installed plugin APK " +
+                        "takes effect. The host rebuilds the service automatically (START_STICKY); " +
+                        "the MCP port is down for a few seconds. Running scripts are interrupted. " +
+                        "Use this after reinstalling the plugin APK.",
+                    inputSchema = ToolSchemas.emptyObject()
+                ),
+                RestartMcpTool(toolContext)
             )
             register(
                 ToolDefinition(
@@ -482,9 +602,24 @@ class McpService internal constructor(
                 ToolDefinition(
                     name = "screenshot",
                     title = "Screenshot",
-                    description = "Capture a screenshot and store it on device.",
+                    description = "Capture a screenshot. By default the response only contains metadata: device-local " +
+                        "'path' and a downloadable 'url' (GET <url>, pass X-Token header when a token is configured) " +
+                        "that a PC client can fetch directly — this is the cheapest option in tokens. " +
+                        "Set inline=true to return the image itself as a standard MCP image content block " +
+                        "(requires 'allow base64' enabled); use maxDimension to trade detail for tokens.",
                     inputSchema = ToolSchemas.objectSchema(
-                        mapOf("asBase64" to ToolSchemas.booleanSchema("Include base64 in response."))
+                        mapOf(
+                            "inline" to ToolSchemas.booleanSchema(
+                                "Return the image as an MCP image content block. Alias: asBase64."
+                            ),
+                            "asBase64" to ToolSchemas.booleanSchema(
+                                "Deprecated alias of inline."
+                            ),
+                            "maxDimension" to ToolSchemas.intSchema(
+                                "Long-edge pixel size of the inline image, default 720 (~311 tokens for a " +
+                                    "1080x2400 screen). Range 200..4096; pass 0 for full resolution."
+                            )
+                        )
                     )
                 ),
                 ScreenshotTool(toolContext)
@@ -550,9 +685,23 @@ class McpService internal constructor(
                 ToolDefinition(
                     name = "get_recent_screenshot",
                     title = "Get Recent Screenshot",
-                    description = "Return metadata (and optional base64) of the most recent screenshot.",
+                    description = "Return metadata (path, width, height, timestamp) of the most recent screenshot, plus a " +
+                        "downloadable 'url' a PC client can fetch directly. Set inline=true to return the image itself " +
+                        "as a standard MCP image content block (requires 'allow base64' enabled); use maxDimension " +
+                        "to trade detail for tokens.",
                     inputSchema = ToolSchemas.objectSchema(
-                        mapOf("asBase64" to ToolSchemas.booleanSchema("Include base64 in response."))
+                        mapOf(
+                            "inline" to ToolSchemas.booleanSchema(
+                                "Return the image as an MCP image content block. Alias: asBase64."
+                            ),
+                            "asBase64" to ToolSchemas.booleanSchema(
+                                "Deprecated alias of inline."
+                            ),
+                            "maxDimension" to ToolSchemas.intSchema(
+                                "Long-edge pixel size of the inline image, default 720. Range 200..4096; " +
+                                    "pass 0 for full resolution."
+                            )
+                        )
                     )
                 ),
                 GetRecentScreenshotTool(toolContext)
@@ -563,6 +712,9 @@ class McpService internal constructor(
     companion object {
         private const val TAG = "McpService"
         internal const val SELF_PROBE_INTERVAL_MILLIS = 20_000L
+
+        /** 空闲检查间隔。实际休眠延迟 = 配置的分钟数 + 最多这么多秒。 */
+        internal const val IDLE_CHECK_INTERVAL_MILLIS = 60_000L
     }
 }
 

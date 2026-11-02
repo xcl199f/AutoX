@@ -1,40 +1,35 @@
 package org.autojs.autoxjs.mcp
 
-import android.content.Context
-import android.content.SharedPreferences
-import androidx.preference.PreferenceManager
+import org.autojs.plugin.api.PluginConfigHost
 
+/**
+ * 把宿主侧的插件配置翻译成 [McpConfig]。
+ *
+ * 配置由宿主持久化（按插件包名分区），插件只负责读取，
+ * 因此这里不再持有任何 SharedPreferences 实例。
+ */
 object McpPrefs {
-    private const val DEFAULT_HOST = "0.0.0.0"
+    internal const val DEFAULT_HOST = "0.0.0.0"
+    internal const val DEFAULT_PORT = 27190
     private const val LOCAL_HOST = "127.0.0.1"
-    private const val DEFAULT_PORT = 27190
     private val LOCAL_HOSTS = setOf(LOCAL_HOST, "localhost", "::1")
 
-    @Suppress("DEPRECATION")
-    private fun getSharedPreferences(context: Context): SharedPreferences {
-        val name = context.packageName + "_preferences"
-        return context.getSharedPreferences(name, Context.MODE_MULTI_PROCESS)
-    }
-
-    /**
-     * 暴露偏好实例，供插件控制器注册配置变更监听。
-     */
-    fun sharedPreferences(context: Context): SharedPreferences = getSharedPreferences(context)
-
-    fun load(context: Context): McpConfig {
-        val prefs = getSharedPreferences(context)
-        // 插件被宿主启用即视为开启 MCP，用户仍可在插件设置里单独关闭
-        val enabled = prefs.getBoolean(McpPrefKeys.KEY_ENABLED, true)
-        val allowBase64 = prefs.getBoolean(McpPrefKeys.KEY_ALLOW_BASE64, false)
-        val host = prefs.getString(McpPrefKeys.KEY_HOST, DEFAULT_HOST).orEmpty().ifBlank { DEFAULT_HOST }
-        val allowNetworkPref = prefs.getBoolean(McpPrefKeys.KEY_ALLOW_NETWORK, true)
+    fun load(config: PluginConfigHost): McpConfig {
+        // 是否启用完全由宿主的插件开关决定：插件被启用才会走到这里。
+        // 不再单独读取 KEY_ENABLED，避免出现两个互相打架的开关。
+        val enabled = true
+        val allowBase64 = config.getBoolean(McpPrefKeys.KEY_ALLOW_BASE64, false)
+        val host = config.getString(McpPrefKeys.KEY_HOST, DEFAULT_HOST)
+            .orEmpty()
+            .ifBlank { DEFAULT_HOST }
+        val allowNetworkPref = config.getBoolean(McpPrefKeys.KEY_ALLOW_NETWORK, true)
         val allowNetwork = allowNetworkPref || !LOCAL_HOSTS.contains(host)
-        val port = prefs.getString(McpPrefKeys.KEY_PORT, DEFAULT_PORT.toString())
-            ?.toIntOrNull()
-            ?.coerceIn(1, 65535)
-            ?: DEFAULT_PORT
-        val token = prefs.getString(McpPrefKeys.KEY_TOKEN, null)?.trim().orEmpty().ifBlank { null }
+        val port = config.getInt(McpPrefKeys.KEY_PORT, DEFAULT_PORT).coerceIn(1, 65535)
+        val token = config.getString(McpPrefKeys.KEY_TOKEN, null)?.trim().orEmpty().ifBlank { null }
         val finalHost = if (allowNetwork) host else LOCAL_HOST
+        val idleShutdown = config.getBoolean(McpPrefKeys.KEY_IDLE_SHUTDOWN, true)
+        val idleMinutes = config.getInt(McpPrefKeys.KEY_IDLE_MINUTES, McpConfig.DEFAULT_IDLE_MINUTES)
+            .coerceIn(McpConfig.MIN_IDLE_MINUTES, McpConfig.MAX_IDLE_MINUTES)
 
         return McpConfig(
             enabled = enabled,
@@ -42,7 +37,9 @@ object McpPrefs {
             port = port,
             token = token,
             allowBase64 = allowBase64,
-            allowNetwork = allowNetwork
+            allowNetwork = allowNetwork,
+            idleShutdown = idleShutdown,
+            idleMinutes = idleMinutes
         )
     }
 }

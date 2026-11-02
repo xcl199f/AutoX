@@ -142,4 +142,49 @@ class McpJsonRpcHandlerTest {
         assertEquals(HttpStatusCode.Accepted, response.status)
         assertNull(response.body)
     }
+
+    @Test
+    fun toolImagesBecomeImageContentBlocksBeforeText() = runBlocking {
+        val registry = ToolRegistry()
+        registry.register(
+            ToolDefinition(
+                name = "shot",
+                title = "Shot",
+                description = "Return an inline image",
+                inputSchema = ToolSchemas.emptyObject()
+            ),
+            McpTool {
+                McpResponse.ok(
+                    mapOf("width" to 324, "height" to 720),
+                    listOf(McpImage(data = "QUJD", mimeType = "image/jpeg"))
+                )
+            }
+        )
+        val handler = McpJsonRpcHandler(
+            registry,
+            serverInfoProvider = { McpServerInfo(name = "TestServer") }
+        )
+        val request = JsonParser.parseString(
+            """
+            {
+              "jsonrpc": "2.0",
+              "id": 11,
+              "method": "tools/call",
+              "params": { "name": "shot", "arguments": {} }
+            }
+            """.trimIndent()
+        ).asJsonObject
+        val response = handler.handleJson(request)
+        val content = response.body!!.getAsJsonObject("result").getAsJsonArray("content")
+        assertEquals(2, content.size())
+        val imageBlock = content[0].asJsonObject
+        assertEquals("image", imageBlock.get("type").asString)
+        assertEquals("QUJD", imageBlock.get("data").asString)
+        assertEquals("image/jpeg", imageBlock.get("mimeType").asString)
+        val textBlock = content[1].asJsonObject
+        assertEquals("text", textBlock.get("type").asString)
+        assertTrue(textBlock.get("text").asString.contains("\"width\":324"))
+        // base64 不应再出现在文本块里，否则 token 成本翻数倍。
+        assertFalse(textBlock.get("text").asString.contains("QUJD"))
+    }
 }

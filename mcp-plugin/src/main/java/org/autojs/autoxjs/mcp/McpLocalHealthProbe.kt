@@ -131,13 +131,23 @@ internal fun isSameDeviceRemoteAddress(
     }
 }
 
+private val LOOPBACK_HOST_NAMES = setOf("localhost", "localhost.localdomain", "ip6-localhost", "ip6-loopback")
+
 private fun parseNumericAddress(address: String): InetAddress? {
     val normalized = address
         .trim()
         .removePrefix("[")
         .removeSuffix("]")
         .substringBefore('%')
-    if (normalized.isBlank() || normalized.any { !it.isDigit() && it !in ".:abcdefABCDEF" }) {
+    if (normalized.isBlank()) {
+        return null
+    }
+    // 引擎给出的 remoteHost 可能是反解后的主机名而不是字面 IP（Android 上 127.0.0.1 通常反解为 localhost）。
+    // 这里只额外放行回环别名，其余非数字地址一律按非同设备处理，避免引入 DNS 依赖。
+    if (normalized.lowercase() in LOOPBACK_HOST_NAMES) {
+        return InetAddress.getLoopbackAddress()
+    }
+    if (normalized.any { !it.isDigit() && it !in ".:abcdefABCDEF" }) {
         return null
     }
     return try {

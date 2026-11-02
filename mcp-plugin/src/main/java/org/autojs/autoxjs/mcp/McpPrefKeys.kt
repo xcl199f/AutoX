@@ -7,4 +7,6 @@ object McpPrefKeys {
     const val KEY_TOKEN = "key_mcp_token"
     const val KEY_ALLOW_BASE64 = "key_mcp_allow_base64"
     const val KEY_ALLOW_NETWORK = "key_mcp_allow_network"
+    const val KEY_IDLE_SHUTDOWN = "key_mcp_idle_shutdown"
+    const val KEY_IDLE_MINUTES = "key_mcp_idle_minutes"
 }

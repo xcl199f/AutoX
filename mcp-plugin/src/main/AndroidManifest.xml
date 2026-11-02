@@ -17,19 +17,17 @@
             android:name="org.autojs.plugin.sdk.description"
             android:value="@string/mcp_plugin_description" />
 
-        <!--  同时作为插件的枚举入口与设置界面  -->
+        <!--
+            插件不提供任何界面：设置页由宿主按插件声明的配置 schema 渲染。
+            本组件只作为枚举标记（无 UI、不导出、无启动图标），
+            宿主通过 org.autojs.plugin.sdk.PLUGIN action 发现本插件。
+        -->
         <activity
-            android:name=".McpSettingsActivity"
-            android:exported="true"
-            android:label="@string/mcp_plugin_label"
-            android:theme="@style/Theme.AppCompat.DayNight">
+            android:name=".McpPluginMarkerActivity"
+            android:exported="false">
             <intent-filter>
                 <action android:name="org.autojs.plugin.sdk.PLUGIN" />
                 <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
     </application>
