@@ -84,7 +84,7 @@ dependencies {
     api(libs.mozilla.rhino.tools)
     implementation(libs.opencv)
     // libs
-    implementation(libs.byte.buddy.android)
+    implementation(libs.dalvik.dx)
     implementation(libs.tesseract4android.core)
     implementation(libs.bundles.mlkit)
     implementation(libs.camera.core)

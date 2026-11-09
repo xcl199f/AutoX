@@ -22,6 +22,7 @@ android {
         targetSdk = versions.target
         versionCode = versions.appVersionCode
         versionName = versions.appVersionName
+        ndkVersion = versions.ndk
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 //        multiDexEnabled = true
         buildConfigField("boolean", "isMarket", "false")
@@ -80,7 +81,7 @@ android {
             isMinifyEnabled = false
             setProguardFiles(
                 listOf(
-                    getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+                    getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
                 )
             )
         }
@@ -92,7 +93,7 @@ android {
             isMinifyEnabled = false
             setProguardFiles(
                 listOf(
-                    getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+                    getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
                 )
             )
         }
@@ -151,6 +152,9 @@ android {
     packaging {
         //ktor cio implementation("io.ktor:ktor-server-cio:2.0.3")
         resources.pickFirsts.add("META-INF/INDEX.LIST")
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 
 }
@@ -234,7 +238,7 @@ dependencies {
 
     implementation(libs.bundles.ktor)
     //qr scan
-    implementation(libs.quickie.bundled)
+    implementation(libs.zxing.android.embedded)
     //TextView markdown
     implementation(libs.markwon)
     implementation(libs.androidx.viewpager2)
