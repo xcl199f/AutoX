@@ -95,7 +95,12 @@ tasks.register("buildV7Api") {
     val v7ApiDir = File(projectDir, "src/main/js/v7-api")
     val v7ModuleDir = File(projectDir, "src/main/assets/v7modules")
 
-    inputs.dir(v7ApiDir)
+    // 只跟踪源码与构建配置。dist 是本任务自己生成的产物、node_modules 由 npm install
+    // 维护，两者若纳入 inputs 会造成「执行改输入」的自反馈，任务永远无法 UP-TO-DATE。
+    inputs.files(fileTree(v7ApiDir).matching {
+        include("**/*")
+        exclude("node_modules/**", "dist/**")
+    })
     outputs.dir(v7ModuleDir)
 
     doLast {
@@ -117,7 +122,11 @@ tasks.register("buildV6Api") {
     val v6ApiDir = File(projectDir, "src/main/js/v6-api")
     val v6ModuleDir = File(projectDir, "src/main/assets/v6modules")
 
-    inputs.dir(v6ApiDir)
+    // 同 buildV7Api：排除 dist 产物与 node_modules，避免输入包含任务自身产物。
+    inputs.files(fileTree(v6ApiDir).matching {
+        include("**/*")
+        exclude("node_modules/**", "dist/**")
+    })
     outputs.dir(v6ModuleDir)
 
     doLast {
