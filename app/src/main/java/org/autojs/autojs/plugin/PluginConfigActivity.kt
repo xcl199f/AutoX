@@ -112,11 +112,25 @@ class PluginConfigFragment : PreferenceFragmentCompat() {
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         val pluginPackage = requireArguments().getString(ARG_PLUGIN_PACKAGE) ?: return
-        val spec = PluginManager.configSpec(pluginPackage) ?: PluginConfigSpec.EMPTY
-        val store = PluginManager.configStore(pluginPackage)
+        val rawSpec = PluginManager.configSpec(pluginPackage)
 
         val screen = preferenceManager.createPreferenceScreen(requireContext())
         preferenceScreen = screen
+
+        if (PluginManager.isPluginIncompatible(pluginPackage)) {
+            screen.addPreference(
+                Preference(requireContext()).apply {
+                    isPersistent = false
+                    isEnabled = false
+                    title = getString(R.string.plugin_config_incompatible_title)
+                    summary = getString(R.string.plugin_config_incompatible_summary)
+                }
+            )
+            return
+        }
+
+        val spec = rawSpec ?: PluginConfigSpec.EMPTY
+        val store = PluginManager.configStore(pluginPackage)
 
         if (spec.isEmpty) {
             screen.addPreference(

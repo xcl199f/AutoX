@@ -14,6 +14,8 @@
 
     <string name="plugin_config_title">插件设置</string>
     <string name="plugin_config_empty">该插件没有可配置项</string>
+    <string name="plugin_config_incompatible_title">插件版本与宿主不匹配</string>
+    <string name="plugin_config_incompatible_summary">该插件使用了旧版接口，请重新安装或更新插件后重试。宿主与插件需要由同一份代码编译。</string>
     <string name="plugin_config_open_custom">打开插件自带设置</string>
     <string name="plugin_config_custom_unavailable">无法打开插件的设置界面</string>
     <string name="plugin_config_load_failed">插件加载失败：%1$s</string>

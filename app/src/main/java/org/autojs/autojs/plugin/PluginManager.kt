@@ -39,6 +39,9 @@ object PluginManager {
 
     private val loaded = ConcurrentHashMap<String, LoadedPlugin>()
 
+    /** 与宿主 plugin-api 契约不兼容的插件，供设置界面给出明确提示。 */
+    private val incompatiblePlugins = ConcurrentHashMap.newKeySet<String>()
+
     @Volatile
     private var appContext: Context? = null
 
@@ -75,10 +78,29 @@ object PluginManager {
     }
 
     /**
-     * 插件声明的配置描述。仅在插件已加载时可用，未加载返回 null。
+     * 该插件是否因跨 APK 契约不匹配而不可用。
      */
-    fun configSpec(packageName: String): PluginConfigSpec? =
-        loaded[packageName]?.plugin?.configSpec()
+    fun isPluginIncompatible(packageName: String): Boolean = packageName in incompatiblePlugins
+
+    /**
+     * 插件声明的配置描述。仅在插件已加载时可用，未加载返回 null。
+     *
+     * 插件以 compileOnly 依赖宿主侧 plugin-api，契约一旦变更（例如给
+     * PluginConfigItem 增加带默认值的字段），旧插件调用的 Kotlin 默认参数
+     * 合成构造函数签名就会与宿主类不一致，抛 NoSuchMethodError。它属于
+     * LinkageError 而非 Exception，普通 catch 抓不到，因此这里统一兜底，
+     * 避免直接闪退。
+     */
+    fun configSpec(packageName: String): PluginConfigSpec? {
+        val plugin = loaded[packageName]?.plugin ?: return null
+        return try {
+            plugin.configSpec().also { incompatiblePlugins.remove(packageName) }
+        } catch (e: LinkageError) {
+            Log.e(TAG, "插件 $packageName 与宿主的 plugin-api 契约不匹配，请重新安装插件", e)
+            incompatiblePlugins.add(packageName)
+            null
+        }
+    }
 
     /**
      * 加载插件但不启用：只执行 [AutoJsPlugin.onCreate]。
