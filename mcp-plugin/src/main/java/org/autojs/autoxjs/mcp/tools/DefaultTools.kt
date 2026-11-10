@@ -315,7 +315,7 @@ class ListAppsTool(
             if (!includeSystem && (app.flags and ApplicationInfo.FLAG_SYSTEM) != 0) {
                 continue
             }
-            val label = app.loadLabel(pm)?.toString() ?: app.packageName
+            val label = app.loadLabel(pm).toString()
             if (!query.isNullOrEmpty()) {
                 val match = label.lowercase(Locale.getDefault()).contains(query) ||
                     app.packageName.lowercase(Locale.getDefault()).contains(query)

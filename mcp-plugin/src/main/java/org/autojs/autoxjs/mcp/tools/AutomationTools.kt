@@ -212,7 +212,7 @@ class GetForegroundAppTool(private val ctx: McpToolContext) : McpTool {
         val pm = ctx.appContext.packageManager
         val label = try {
             val appInfo = pm.getApplicationInfo(packageName, 0)
-            pm.getApplicationLabel(appInfo)?.toString() ?: packageName
+            pm.getApplicationLabel(appInfo).toString()
         } catch (_: Exception) {
             packageName
         }
@@ -452,8 +452,8 @@ private fun buildCompactNodes(node: NodeInfo, parentPackage: String?, isRoot: Bo
 
     if (hasSignal || isRoot) {
         node.id?.takeIf { it.isNotBlank() }?.let { data["id"] = it }
-        node.text?.toString()?.takeIf { it.isNotBlank() }?.let { data["t"] = it }
-        node.desc?.toString()?.takeIf { it.isNotBlank() }?.let { data["d"] = it }
+        node.text?.takeIf { it.isNotBlank() }?.let { data["t"] = it }
+        node.desc?.takeIf { it.isNotBlank() }?.let { data["d"] = it }
     }
 
     val pkg = node.packageName?.toString()?.takeIf { it.isNotBlank() }
@@ -492,10 +492,10 @@ private fun hasNodeSignal(node: NodeInfo): Boolean {
     if (node.clickable || node.focusable || node.scrollable || node.longClickable) {
         return true
     }
-    if (!node.text?.toString().isNullOrBlank()) {
+    if (node.text.isNotBlank()) {
         return true
     }
-    if (!node.desc?.toString().isNullOrBlank()) {
+    if (!node.desc.isNullOrBlank()) {
         return true
     }
     if (!node.id.isNullOrBlank()) {
