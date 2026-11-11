@@ -27,10 +27,7 @@ import com.stardust.util.ScreenMetrics
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
 import io.reactivex.rxjava3.disposables.Disposable
 import io.reactivex.rxjava3.functions.Consumer
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import org.opencv.core.Point
 import org.opencv.core.Rect
 import org.opencv.imgproc.Imgproc
@@ -40,7 +37,13 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.sqrt
+
+/** legacy 截图权限请求的默认超时：给系统授权与内部重试留足时间。 */
+private const val DEFAULT_CAPTURE_TIMEOUT_MS = 15_000L
 
 /**
  * Created by Stardust on 2017/5/20.
@@ -70,44 +73,8 @@ class Images(
         }
     }
 
-    fun requestScreenCaptureLegacy(orientation: Int): ScriptPromiseAdapter {
-        val outerPromise = ScriptPromiseAdapter()
-        val weakImages = java.lang.ref.WeakReference(this)
-
-        try {
-            val images = weakImages.get() ?: run {
-                outerPromise.resolve(false)
-                return outerPromise
-            }
-
-            val innerPromise = images.mScreenCaptureRequester.requestScreenCaptureLegacy(
-                images.mContext,
-                orientation
-            )
-
-            innerPromise.onResolve(object : ScriptPromiseAdapter.Callback {
-                override fun call(arg: Any?) {
-                    outerPromise.resolve(arg)
-                }
-            })
-
-            innerPromise.onReject(object : ScriptPromiseAdapter.Callback {
-                override fun call(arg: Any?) {
-                    val img = weakImages.get()
-                    img?.mScriptRuntime?.toast(arg as String?)
-                    Log.e(Images::class.java.name, "请求截图权限失败: $arg")
-                    outerPromise.resolve(false)
-                }
-            })
-        } catch (e: Exception) {
-            val images = weakImages.get()
-            images?.mScriptRuntime?.toast(e.message)
-            Log.e(Images::class.java.name, "请求截图权限失败", e)
-            outerPromise.resolve(false)
-        }
-
-        return outerPromise
-    }
+    // legacy 截图权限统一走文件末尾的同步版本（Boolean），不再提供
+    // 同名 1 参 Promise 重载，避免两种返回语义与 Rhino 重载歧义。
 
     fun stopScreenCapturer() {
         mScreenCaptureRequester.recycle()
@@ -522,64 +489,65 @@ class Images(
     }
 
     /**
-     * 异步请求截图权限（使用CompletableDeferred）
+     * 请求截图权限（legacy 通道，不跳转应用），同步等待结果。
+     *
+     * timeout 用 Any? 接收：JS 封装 requestScreenCaptureLegacy(landscape, timeout)
+     * 固定传两个参数，省略 timeout 时 Rhino 传的是 org.mozilla.javascript.Undefined，
+     * 基本类型无法匹配，会报「找不到方法 ...(number, Undefined)」。
+     * 不再提供 1 参重载，避免同名方法出现 Boolean / ScriptPromiseAdapter 两种返回语义。
+     *
+     * 用 CountDownLatch 而不是 runBlocking：脚本 forceStop 会 interrupt 线程，
+     * latch.await 能响应中断；结果回调由 ScreenCaptureManager 在主线程触发，
+     * 不依赖脚本线程的事件循环，因此不会死锁。
      */
-    fun requestScreenCaptureLegacyAsync(orientation: Int, deferred: CompletableDeferred<Boolean>) {
-        val weakImages = java.lang.ref.WeakReference(this)
-        try {
-            val images = weakImages.get()
-            if (images == null) {
-                deferred.complete(false)
-                return
+    fun requestScreenCaptureLegacy(orientation: Int, timeout: Any?): Boolean {
+        val timeoutMs = (timeout as? Number)?.toLong()?.takeIf { it > 0 }
+            ?: DEFAULT_CAPTURE_TIMEOUT_MS
+        val latch = CountDownLatch(1)
+        val result = AtomicBoolean(false)
+        val delivered = AtomicBoolean(false)
+
+        requestLegacyCapture(orientation) { ok ->
+            if (delivered.compareAndSet(false, true)) {
+                result.set(ok)
+                latch.countDown()
             }
-            val innerPromise = images.mScreenCaptureRequester.requestScreenCaptureLegacy(
-                images.mContext,
-                orientation
-            )
+        }
+
+        return try {
+            if (latch.await(timeoutMs, TimeUnit.MILLISECONDS)) {
+                result.get()
+            } else {
+                Log.w(Images::class.java.name, "请求截图权限超时: ${timeoutMs}ms")
+                false
+            }
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            Log.w(Images::class.java.name, "请求截图权限等待被中断")
+            false
+        }
+    }
+
+    /** 内部实现：把 ScreenCaptureRequester 的 Promise 转成一次性回调。 */
+    private fun requestLegacyCapture(orientation: Int, callback: (Boolean) -> Unit) {
+        try {
+            val innerPromise = mScreenCaptureRequester.requestScreenCaptureLegacy(mContext, orientation)
             innerPromise.onResolve(object : ScriptPromiseAdapter.Callback {
                 override fun call(arg: Any?) {
-                    deferred.complete((arg as? Boolean) ?: true)
+                    callback((arg as? Boolean) ?: true)
                 }
             })
             innerPromise.onReject(object : ScriptPromiseAdapter.Callback {
                 override fun call(arg: Any?) {
-                    val img = weakImages.get()
-                    img?.mScriptRuntime?.toast(arg?.toString())
+                    mScriptRuntime.toast(arg?.toString())
                     Log.e(Images::class.java.name, "请求截图权限失败: $arg")
-                    deferred.complete(false)
+                    callback(false)
                 }
             })
         } catch (e: Exception) {
-            val images = weakImages.get()
-            images?.mScriptRuntime?.toast(e.message)
+            mScriptRuntime.toast(e.message)
             Log.e(Images::class.java.name, "请求截图权限失败", e)
-            deferred.complete(false)
-        }
-    }
-
-    /**
-     * 带超时的请求截图权限。
-     *
-     * timeout 用 Any? 接收：JS 封装 requestScreenCaptureLegacy(landscape, timeout)
-     * 固定传两个参数，省略 timeout 时 Rhino 传的是 org.mozilla.javascript.Undefined，
-     * 基本类型 long 无法匹配，会报「找不到方法 ...(number, Undefined)」。
-     * 不加 @JvmOverloads / 默认值，避免生成 (int) -> Boolean 与上方
-     * (int) -> ScriptPromiseAdapter 形成仅返回类型不同的歧义重载。
-     */
-    fun requestScreenCaptureLegacy(orientation: Int, timeout: Any?): Boolean {
-        val timeoutMs = (timeout as? Number)?.toLong()?.takeIf { it > 0 } ?: 3000L
-        val deferred = CompletableDeferred<Boolean>()
-        requestScreenCaptureLegacyAsync(orientation, deferred)
-        return try {
-            runBlocking {
-                withTimeout(timeoutMs) { deferred.await() }
-            }
-        } catch (e: TimeoutCancellationException) {
-            Log.w(Images::class.java.name, "请求截图权限超时: ${timeoutMs}ms")
-            false
-        } catch (e: Exception) {
-            Log.e(Images::class.java.name, "请求截图权限失败", e)
-            false
+            callback(false)
         }
     }
 
