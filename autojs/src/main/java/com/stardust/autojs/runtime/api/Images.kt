@@ -28,6 +28,7 @@ import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
 import io.reactivex.rxjava3.disposables.Disposable
 import io.reactivex.rxjava3.functions.Consumer
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.opencv.core.Point
@@ -482,54 +483,42 @@ class Images(
         val h = img.rows()
         var startX = 0
         var startY = 0
-        var endX = h
-        var endY = w
+        var endX = w
+        var endY = h
 
         if (region != null) {
-            startX = region.x
-            startY = region.y
-            var endX2 = region.x + region.width
-            var endY2 = region.y + region.height
-            if (endX2 > w) endX2 = w
-            if (endY2 > h) endY2 = h
-            if (startX < 0) startX = 0
-            if (startY < 0) startY = 0
-            endX = endY2
-            endY = endX2
+            startX = region.x.coerceAtLeast(0)
+            startY = region.y.coerceAtLeast(0)
+            endX = (region.x + region.width).coerceAtMost(w)
+            endY = (region.y + region.height).coerceAtMost(h)
         }
 
-        val regionW = endY - startX
-        val regionH = endX - startY
+        val regionW = endX - startX
+        val regionH = endY - startY
         if (regionW <= 0 || regionH <= 0) return 0f
 
-        var sampleCountFinal = sampleCount
-        val totalPixels = regionW * regionH
-        if (sampleCountFinal >= totalPixels) {
-            sampleCountFinal = totalPixels
-        }
-        val step = maxOf(1, sqrt(totalPixels.toDouble() / sampleCountFinal.toDouble()).toInt())
-        var actualCount = (Math.ceil(regionW.toDouble() / step) * Math.ceil(regionH.toDouble() / step)).toInt()
-        if (actualCount > sampleCountFinal) {
-            // step++
-        }
-        var total = 0L
+        // sampleCount 为 0/负数时原本会除零得到 Infinity，这里收敛到合法区间
+        val samples = sampleCount.coerceIn(1, regionW * regionH)
+        val step = maxOf(1, sqrt((regionW * regionH).toDouble() / samples).toInt())
+        var total = 0.0
         var count = 0
         val channels = img.channels()
 
-        for (y in startY until endX step step) {
-            for (x in startX until endY step step) {
+        // OpenCV Mat.get(row, col) = (y, x)
+        for (y in startY until endY step step) {
+            for (x in startX until endX step step) {
                 val pixel = img.get(y, x)
                 val brightness = when (channels) {
                     1, 2 -> pixel[0]
                     3, 4 -> (pixel[0] + pixel[1] + pixel[2]) / 3.0
                     else -> pixel[0]
                 }
-                total += brightness.toLong()
+                total += brightness
                 count++
             }
         }
 
-        return if (count > 0) total.toFloat() / count else 0f
+        return if (count > 0) (total / count).toFloat() else 0f
     }
 
     /**
@@ -549,13 +538,13 @@ class Images(
             )
             innerPromise.onResolve(object : ScriptPromiseAdapter.Callback {
                 override fun call(arg: Any?) {
-                    deferred.complete(true)
+                    deferred.complete((arg as? Boolean) ?: true)
                 }
             })
             innerPromise.onReject(object : ScriptPromiseAdapter.Callback {
                 override fun call(arg: Any?) {
                     val img = weakImages.get()
-                    img?.mScriptRuntime?.toast(arg as String?)
+                    img?.mScriptRuntime?.toast(arg?.toString())
                     Log.e(Images::class.java.name, "请求截图权限失败: $arg")
                     deferred.complete(false)
                 }
@@ -569,18 +558,28 @@ class Images(
     }
 
     /**
-     * 带超时的请求截图权限
-     * @param orientation 屏幕方向
-     * @param timeout 超时时间，默认3秒
+     * 带超时的请求截图权限。
+     *
+     * timeout 用 Any? 接收：JS 封装 requestScreenCaptureLegacy(landscape, timeout)
+     * 固定传两个参数，省略 timeout 时 Rhino 传的是 org.mozilla.javascript.Undefined，
+     * 基本类型 long 无法匹配，会报「找不到方法 ...(number, Undefined)」。
+     * 不加 @JvmOverloads / 默认值，避免生成 (int) -> Boolean 与上方
+     * (int) -> ScriptPromiseAdapter 形成仅返回类型不同的歧义重载。
      */
-    @JvmOverloads
-    fun requestScreenCaptureLegacy(orientation: Int, timeout: Long = 3000L): Boolean {
+    fun requestScreenCaptureLegacy(orientation: Int, timeout: Any?): Boolean {
+        val timeoutMs = (timeout as? Number)?.toLong()?.takeIf { it > 0 } ?: 3000L
         val deferred = CompletableDeferred<Boolean>()
         requestScreenCaptureLegacyAsync(orientation, deferred)
-        return runBlocking {
-            withTimeout(timeout) {
-                deferred.await()
+        return try {
+            runBlocking {
+                withTimeout(timeoutMs) { deferred.await() }
             }
+        } catch (e: TimeoutCancellationException) {
+            Log.w(Images::class.java.name, "请求截图权限超时: ${timeoutMs}ms")
+            false
+        } catch (e: Exception) {
+            Log.e(Images::class.java.name, "请求截图权限失败", e)
+            false
         }
     }
 
