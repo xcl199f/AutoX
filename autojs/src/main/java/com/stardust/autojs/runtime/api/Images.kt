@@ -16,6 +16,7 @@ import com.stardust.autojs.core.image.ColorFinder
 import com.stardust.autojs.core.image.ImageWrapper
 import com.stardust.autojs.core.image.TemplateMatching
 import com.stardust.autojs.core.image.TemplateMatching.MATCHING_METHOD_DEFAULT
+import com.stardust.autojs.core.image.capture.ScreenCapturer
 import com.stardust.autojs.core.image.capture.ScreenCaptureRequester
 import com.stardust.autojs.core.opencv.Mat
 import com.stardust.autojs.core.opencv.OpenCVHelper
@@ -491,18 +492,40 @@ class Images(
     /**
      * 请求截图权限（legacy 通道，不跳转应用），同步等待结果。
      *
-     * timeout 用 Any? 接收：JS 封装 requestScreenCaptureLegacy(landscape, timeout)
-     * 固定传两个参数，省略 timeout 时 Rhino 传的是 org.mozilla.javascript.Undefined，
-     * 基本类型无法匹配，会报「找不到方法 ...(number, Undefined)」。
-     * 不再提供 1 参重载，避免同名方法出现 Boolean / ScriptPromiseAdapter 两种返回语义。
+     * 提供 0 / 1 / 2 参三个重载，统一返回 Boolean：
+     * - 无参：自动方向 + 默认超时
+     * - 1 参：Boolean 当作横屏开关，Number 当作方向常量，其它值回退自动方向
+     * - 2 参：(方向或横屏开关, 超时毫秒)
+     *
+     * 参数一律用 Any? 接收：JS 省略实参时 Rhino 传的是
+     * org.mozilla.javascript.Undefined，基本类型无法匹配会报「找不到方法」。
+     * 三个重载 arity 不同，Rhino 按实参个数选择，不会歧义；不要再引入返回
+     * ScriptPromiseAdapter 的同名重载，那会重演仅返回类型不同的歧义问题。
      *
      * 用 CountDownLatch 而不是 runBlocking：脚本 forceStop 会 interrupt 线程，
      * latch.await 能响应中断；结果回调由 ScreenCaptureManager 在主线程触发，
      * 不依赖脚本线程的事件循环，因此不会死锁。
      */
-    fun requestScreenCaptureLegacy(orientation: Int, timeout: Any?): Boolean {
-        val timeoutMs = (timeout as? Number)?.toLong()?.takeIf { it > 0 }
-            ?: DEFAULT_CAPTURE_TIMEOUT_MS
+    fun requestScreenCaptureLegacy(): Boolean =
+        requestLegacyWithTimeout(ScreenCapturer.ORIENTATION_AUTO, DEFAULT_CAPTURE_TIMEOUT_MS)
+
+    fun requestScreenCaptureLegacy(arg: Any?): Boolean =
+        requestLegacyWithTimeout(normalizeOrientation(arg), DEFAULT_CAPTURE_TIMEOUT_MS)
+
+    fun requestScreenCaptureLegacy(orientation: Any?, timeout: Any?): Boolean =
+        requestLegacyWithTimeout(normalizeOrientation(orientation), normalizeTimeout(timeout))
+
+    private fun normalizeOrientation(value: Any?): Int = when (value) {
+        is Boolean -> if (value) ScreenCapturer.ORIENTATION_LANDSCAPE
+        else ScreenCapturer.ORIENTATION_PORTRAIT
+        is Number -> value.toInt()
+        else -> ScreenCapturer.ORIENTATION_AUTO
+    }
+
+    private fun normalizeTimeout(value: Any?): Long =
+        (value as? Number)?.toLong()?.takeIf { it > 0 } ?: DEFAULT_CAPTURE_TIMEOUT_MS
+
+    private fun requestLegacyWithTimeout(orientation: Int, timeoutMs: Long): Boolean {
         val latch = CountDownLatch(1)
         val result = AtomicBoolean(false)
         val delivered = AtomicBoolean(false)

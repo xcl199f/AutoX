@@ -58,7 +58,12 @@ images.requestScreenCapture = function (landscape: boolean) {
     return javaImages.requestScreenCapture(orientation);
 }
 
-images.requestScreenCaptureLegacy = function (landscape: boolean, timeout?: number) {
+images.requestScreenCaptureLegacy = function (landscape?: boolean | number, timeout?: number) {
+    // 只给一个数字时视为超时（landscape 是 boolean，传数字只能是 timeout）。
+    if (typeof landscape === 'number' && timeout === undefined) {
+        timeout = landscape;
+        landscape = undefined;
+    }
     const ScreenCapturer = com.stardust.autojs.core.image.capture.ScreenCapturer;
     var orientation = ScreenCapturer.ORIENTATION_AUTO;
     if (landscape === true) {
@@ -66,6 +71,14 @@ images.requestScreenCaptureLegacy = function (landscape: boolean, timeout?: numb
     }
     if (landscape === false) {
         orientation = ScreenCapturer.ORIENTATION_PORTRAIT;
+    }
+    // 按实参个数分发到 Java 的 0 / 1 / 2 参重载，不把 undefined 交给
+    // Rhino 做 Java 方法匹配（基本类型无法匹配 Undefined）。
+    if (landscape === undefined && timeout === undefined) {
+        return javaImages.requestScreenCaptureLegacy();
+    }
+    if (timeout === undefined) {
+        return javaImages.requestScreenCaptureLegacy(orientation);
     }
     return javaImages.requestScreenCaptureLegacy(orientation, timeout);
 };
