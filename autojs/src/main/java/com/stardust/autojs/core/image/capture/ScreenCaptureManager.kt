@@ -19,9 +19,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import java.lang.ref.WeakReference
 import java.util.concurrent.CancellationException
 import kotlin.time.Duration.Companion.milliseconds
+
+/** 绑定前台截图服务的最长等待时间；超时后失败返回，避免脚本线程永久挂起。 */
+private const val BIND_TIMEOUT_MILLIS = 10_000L
 
 class ScreenCaptureManager : ScreenCaptureRequester {
     @Volatile
@@ -65,29 +69,45 @@ class ScreenCaptureManager : ScreenCaptureRequester {
                             .getMediaProjection(Activity.RESULT_OK, result)
                     CaptureForegroundService.setMediaProjection(context, mediaProjection!!)
                     screenCapture = ScreenCapturer(mediaProjection!!, orientation)
-                } finally {
                     serviceConnected.complete(Unit)
-                    context.unbindService(this)
+                } catch (e: Exception) {
+                    // 原来 finally 里无条件 complete(Unit)，getMediaProjection 抛异常时
+                    // 会伪装成成功，脚本随后拿到不可用的截屏器。
+                    serviceConnected.completeExceptionally(e)
+                } finally {
+                    runCatching { context.unbindService(this) }
+                    currentConnection = null
                 }
             }
 
             override fun onServiceDisconnected(name: ComponentName?) {
-                // 服务意外断开时处理
+                currentConnection = null
                 serviceConnected.completeExceptionally(IllegalStateException("Service disconnected unexpectedly"))
             }
         }
 
-        // 先绑定服务再启动（避免延迟）
         val serviceIntent = Intent(context, CaptureForegroundService::class.java)
-        context.bindService(
-            serviceIntent,
-            connection,
-            Context.BIND_AUTO_CREATE
-        )
+        val bound = context.bindService(serviceIntent, connection, Context.BIND_AUTO_CREATE)
+        if (!bound) {
+            serviceConnected.completeExceptionally(
+                IllegalStateException("bind CaptureForegroundService failed")
+            )
+        } else {
+            currentConnection = connection
+            context.startForegroundService(serviceIntent)
+        }
 
-        // 绑定后立即启动服务
-        context.startForegroundService(serviceIntent)
-        serviceConnected.await()
+        try {
+            // 服务被系统拒绝或迟迟不回调时不能无限挂起脚本线程。
+            withTimeout(BIND_TIMEOUT_MILLIS) { serviceConnected.await() }
+        } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+            // 从未回调时 onServiceConnected 的 finally 不会解绑，这里补上。
+            currentConnection?.let {
+                runCatching { context.unbindService(it) }
+                currentConnection = null
+            }
+            throw IllegalStateException("CaptureForegroundService bind timeout", e)
+        }
     }
 
     override fun requestScreenCaptureLegacy(context: Context, orientation: Int): ScriptPromiseAdapter {

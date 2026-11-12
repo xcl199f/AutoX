@@ -46,8 +46,22 @@ class McpJsonRpcHandler(
                 errorResponse(null, -32600, "Invalid Request")
             )
         }
-        return handleJson(json.asJsonObject)
+        return try {
+            handleJson(json.asJsonObject)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "Internal JSON-RPC error", e)
+            RpcHttpResponse(
+                HttpStatusCode.InternalServerError,
+                errorResponse(null, -32603, "Internal error")
+            )
+        }
     }
+
+    /** 传输层异常时给客户端一个符合 JSON-RPC 规范的错误体，而不是空的 HTTP 500。 */
+    fun internalErrorResponse(message: String = "Internal error"): JsonObject =
+        errorResponse(null, -32603, message)
 
     suspend fun handleJson(json: JsonObject): RpcHttpResponse {
         val jsonrpc = json.get("jsonrpc")?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
@@ -107,9 +121,15 @@ class McpJsonRpcHandler(
         val clientVersion = params.asJsonObject.get("protocolVersion")
             ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
             ?.asString
+        // initialize 必须回服务端实际支持的版本，不能回显客户端版本：
+        // 回显会让客户端误以为服务端支持任意版本，后续按该版本发来的通知/能力
+        // 请求本端根本不认识。客户端版本不受支持时由客户端决定是否继续。
+        if (clientVersion != null && clientVersion != protocolVersion) {
+            Log.i(TAG, "client protocolVersion=$clientVersion unsupported, replying $protocolVersion")
+        }
         val info = serverInfoProvider()
         val result = JsonObject().apply {
-            addProperty("protocolVersion", clientVersion ?: protocolVersion)
+            addProperty("protocolVersion", protocolVersion)
             add("capabilities", JsonObject().apply {
                 add("tools", JsonObject().apply {
                     addProperty("listChanged", false)

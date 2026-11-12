@@ -25,6 +25,3 @@ autojs/.cxx/ndk_locator_record_68547592.json
 autojs/.cxx/ndk_locator_record_68547592_key.json
 *.aab
 output-metadata.json
-
-# AI 助手工作目录（本地记忆，不纳入仓库）
-.workbuddy-ai/

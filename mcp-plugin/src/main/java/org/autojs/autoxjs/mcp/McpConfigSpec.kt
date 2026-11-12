@@ -75,7 +75,7 @@ internal fun buildMcpConfigSpec(context: Context): PluginConfigSpec = PluginConf
                     type = PluginConfigType.BOOLEAN,
                     title = context.getString(R.string.mcp_settings_allow_network_title),
                     summary = context.getString(R.string.mcp_settings_allow_network_summary),
-                    defaultValue = "true"
+                    defaultValue = "false"
                 )
             )
         )

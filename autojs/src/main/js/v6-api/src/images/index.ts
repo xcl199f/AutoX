@@ -331,7 +331,8 @@ images.findImage = function (img: Image, template: Image, options?: FindImageOpt
     var weakThreshold = options.weakThreshold || 0.6;
     const transparentMask = !!options.transparentMask;
     const useGrayscale = !!options.useGrayscale;
-    const matchMethod = options.matchMethod || 5;
+    // 0 是合法的 TM_SQDIFF，不能用 || 回退默认值。
+    const matchMethod = options.matchMethod != null ? options.matchMethod : 5;
     if (options.region) {
         return javaImages.findImage(img, template, weakThreshold, threshold, buildRegion(options.region, img), maxLevel, transparentMask, useGrayscale, matchMethod);
     } else {
@@ -358,7 +359,7 @@ images.matchMultiTemplates = function (img: Image, templates: Image[],
     var result;
     const transparentMask = !!options.transparentMask;
     const useGrayscale = !!options.useGrayscale;
-    const matchMethod = options.matchMethod || 5;
+    const matchMethod = options.matchMethod != null ? options.matchMethod : 5;
     if (options.region) {
         result = javaImages.matchMultiTemplates(img, templates, weakThreshold, threshold, buildRegion(options.region, img), maxLevel, max, transparentMask, useGrayscale, matchMethod);
     } else {

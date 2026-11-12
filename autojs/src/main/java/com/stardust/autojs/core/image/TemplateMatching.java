@@ -89,6 +89,13 @@ public class TemplateMatching {
                                                         float weakThreshold, float strictThreshold,
                                                         int maxLevel, int limit, Boolean transparentMask,
                                                         boolean useGrayscale) {
+        // 灰度化会把 RGBA 转成单通道，alpha 不复存在，processingAlphaChannel()
+        // 之后只能拿到错误的蒙版。与其静默给出错误匹配结果，不如明确拒绝。
+        if (useGrayscale && Boolean.TRUE.equals(transparentMask)) {
+            throw new IllegalArgumentException(
+                    "useGrayscale and transparentMask cannot be used together: "
+                            + "grayscale conversion drops the alpha channel");
+        }
         TimingLogger logger = new TimingLogger(LOG_TAG, "fast_multi_tm");
         List<Mat> resourcesToRelease = new ArrayList<>();
         List<Match> allResults = new ArrayList<>();

@@ -270,18 +270,31 @@ object PluginManager {
     /**
      * 在 `:script` 进程内把插件运行状态对齐到 [desired]。
      *
-     * 配置变化时也会重建实例，这样端口之类的改动无需重启宿主即可生效。
+     * 只有配置快照真正变化的插件才重建：每次写入任意配置项都会触发一次
+     * sync，若无条件 rebuild 全部插件，MCP 这类常驻服务会被反复 stop-start，
+     * 端口容易卡在 TIME_WAIT 或撞上停止/启动竞态而起不来。
      */
     @Synchronized
     fun applyRuntimePlugins(desired: Map<String, Bundle>) {
+        val previous = runtimeDesired
         runtimeDesired = desired
         loaded.keys.filterNot { it in desired.keys }.forEach { stale ->
             unload(stale)
         }
         desired.forEach { (packageName, snapshot) ->
-            rebuild(packageName, snapshot)
+            if (!loaded.containsKey(packageName) || !sameConfig(previous[packageName], snapshot)) {
+                rebuild(packageName, snapshot)
+            }
         }
         Log.i(TAG, "runtime plugins applied: ${desired.keys}")
+    }
+
+    /** 两次下发的配置快照是否完全一致（Bundle 本身没有实现内容比较）。 */
+    @Suppress("DEPRECATION") // Bundle.get(String) 在 API 33 标记废弃，但需兼容 minSdk 27
+    private fun sameConfig(previous: Bundle?, current: Bundle): Boolean {
+        if (previous == null) return false
+        if (previous.keySet() != current.keySet()) return false
+        return previous.keySet().all { key -> previous.get(key) == current.get(key) }
     }
 
     /**
@@ -331,6 +344,9 @@ object PluginManager {
                 .onFailure { Log.w(TAG, "onDisable failed for $packageName", it) }
             runCatching { old.plugin.onDestroy() }
                 .onFailure { Log.w(TAG, "onDestroy failed for $packageName", it) }
+            // onDestroy 不保证撤掉前台通知，漏掉会让通知在插件重建后残留。
+            runCatching { old.host.foreground.stopForeground() }
+                .onFailure { Log.w(TAG, "stopForeground failed for $packageName", it) }
         }
         ensureLoaded(packageName, snapshot)
             .onSuccess { entry ->
@@ -375,6 +391,11 @@ internal class HostPluginHost(
      * 并在 `onStartCommand(null)` 里按磁盘状态恢复插件。
      */
     override fun restartRuntime() {
+        if (!PluginManager.isRuntimeProcess) {
+            // 主进程也可能拿到 PluginHost，杀掉它会把整个 App 一起杀死。
+            Log.w("AutoXPlugin/$packageName", "restartRuntime ignored outside runtime process")
+            return
+        }
         Handler(Looper.getMainLooper()).postDelayed({
             Log.i("AutoXPlugin/$packageName", "restarting runtime process, pid=${android.os.Process.myPid()}")
             android.os.Process.killProcess(android.os.Process.myPid())

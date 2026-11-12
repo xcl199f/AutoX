@@ -12,7 +12,6 @@ object McpPrefs {
     internal const val DEFAULT_HOST = "0.0.0.0"
     internal const val DEFAULT_PORT = 27190
     private const val LOCAL_HOST = "127.0.0.1"
-    private val LOCAL_HOSTS = setOf(LOCAL_HOST, "localhost", "::1")
 
     fun load(config: PluginConfigHost): McpConfig {
         // 是否启用完全由宿主的插件开关决定：插件被启用才会走到这里。
@@ -22,8 +21,10 @@ object McpPrefs {
         val host = config.getString(McpPrefKeys.KEY_HOST, DEFAULT_HOST)
             .orEmpty()
             .ifBlank { DEFAULT_HOST }
-        val allowNetworkPref = config.getBoolean(McpPrefKeys.KEY_ALLOW_NETWORK, true)
-        val allowNetwork = allowNetworkPref || !LOCAL_HOSTS.contains(host)
+        // 开关必须真正生效：默认 host 是 0.0.0.0，若再用 host 反推 allowNetwork，
+        // 关闭「允许局域网访问」时仍会监听全网卡，配合空 token 等于无认证开放。
+        // 配置缺失时默认只监听回环地址。
+        val allowNetwork = config.getBoolean(McpPrefKeys.KEY_ALLOW_NETWORK, false)
         val port = config.getInt(McpPrefKeys.KEY_PORT, DEFAULT_PORT).coerceIn(1, 65535)
         val token = config.getString(McpPrefKeys.KEY_TOKEN, null)?.trim().orEmpty().ifBlank { null }
         val finalHost = if (allowNetwork) host else LOCAL_HOST

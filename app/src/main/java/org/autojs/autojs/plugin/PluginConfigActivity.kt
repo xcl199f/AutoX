@@ -59,14 +59,13 @@ class PluginConfigActivity : AppCompatActivity() {
         supportActionBar?.setDisplayShowHomeEnabled(true)
         toolbar.setNavigationOnClickListener { finish() }
 
-        if (savedInstanceState != null) {
-            // 旋转等重建场景：Fragment 已由系统恢复，只需补回标题。
-            supportActionBar?.title = PluginManager.loadedPlugin(pluginPackage)?.meta?.label
-                ?: getString(R.string.plugin_config_title)
-            return
-        }
+        supportActionBar?.title = PluginManager.loadedPlugin(pluginPackage)?.meta?.label
+            ?: getString(R.string.plugin_config_title)
 
-        // 加载插件涉及 dex 解析，放到 IO 线程；配置页本身很轻，加载完再挂 Fragment。
+        // 不能仅凭 savedInstanceState != null 就跳过加载：旋转时加载协程会被
+        // Activity 销毁取消，若它尚未提交 Fragment，或进程被回收导致 loaded 缓存
+        // 为空，直接 return 会让配置页永久空白。统一重新加载，加载完成后用
+        // replace 覆盖系统恢复出来的旧 Fragment（偏好值都是即时保存的，无损失）。
         scope.launch {
             val result = withContext(Dispatchers.IO) { PluginManager.ensureLoaded(pluginPackage) }
             val loaded = result.getOrElse { error ->
@@ -85,9 +84,11 @@ class PluginConfigActivity : AppCompatActivity() {
                 return@launch
             }
             supportActionBar?.title = loaded.meta.label
+            // 旋转期间协程可能在 onSaveInstanceState 之后才完成，用
+            // commitAllowingStateLoss 避免抛 IllegalStateException。
             supportFragmentManager.beginTransaction()
                 .replace(R.id.settings_container, PluginConfigFragment.newInstance(pluginPackage))
-                .commit()
+                .commitAllowingStateLoss()
         }
     }
 

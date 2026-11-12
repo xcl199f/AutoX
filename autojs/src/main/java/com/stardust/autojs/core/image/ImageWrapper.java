@@ -133,10 +133,12 @@ public class ImageWrapper {
                         return ImageWrapper.lambda$trackThis$2((WeakReference) obj);
                     }
                 });
-                sAllImages.add(new WeakReference<>(this));
-                if (sAllImages.size() > 10000) {
+                // 先回收再登记：原先先 add 再判阈值，触发全量回收时会把
+                // 刚创建、即将返回给脚本的这张图也回收掉。
+                if (sAllImages.size() >= 10000) {
                     recycleAllTrackedImages();
                 }
+                sAllImages.add(new WeakReference<>(this));
             }
         }
     }

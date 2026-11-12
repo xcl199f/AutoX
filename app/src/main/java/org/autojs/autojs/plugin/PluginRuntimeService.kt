@@ -45,26 +45,35 @@ class PluginRuntimeService : Service() {
             return START_STICKY
         }
         if (intent.action == ACTION_HOST_FOREGROUND) {
-            // 只是「宿主回到前台」的唤醒通知，没有新的配置快照。
-            // 若本进程还没加载任何插件（服务被拉起但尚未同步过），先按磁盘状态补一次，
+            // 若本进程还没加载任何插件（服务被拉起但尚未同步过），先补一次，
             // 否则通知会打到空集合上，休眠中的插件永远醒不过来。
+            // 优先用主进程随通知带来的快照：本进程若已存活，其 SharedPreferences
+            // 缓存可能是旧值，不能在这里读磁盘。
             runCatching {
                 if (!PluginManager.hasLoadedPlugins()) {
-                    PluginManager.applyRuntimePlugins(loadDesiredFromDisk())
+                    PluginManager.applyRuntimePlugins(
+                        desiredFromIntent(intent) ?: loadDesiredFromDisk()
+                    )
                 }
                 PluginManager.applyHostForeground()
             }.onFailure { Log.e(TAG, "host foreground notify failed", it) }
             return START_STICKY
         }
-        val packages = intent.getStringArrayListExtra(EXTRA_PACKAGES).orEmpty()
-        val configs = intent.getParcelableArrayListExtra<Bundle>(EXTRA_CONFIGS).orEmpty()
-        val desired = LinkedHashMap<String, Bundle>(packages.size)
-        packages.forEachIndexed { index, pkg ->
-            desired[pkg] = configs.getOrNull(index) ?: Bundle()
-        }
+        val desired = desiredFromIntent(intent) ?: emptyMap()
         runCatching { PluginManager.applyRuntimePlugins(desired) }
             .onFailure { Log.e(TAG, "apply runtime plugins failed", it) }
         return START_STICKY
+    }
+
+    /** 从 Intent 里还原「插件 -> 配置快照」；旧版通知没带快照时返回 null。 */
+    private fun desiredFromIntent(intent: Intent): Map<String, Bundle>? {
+        val packages = intent.getStringArrayListExtra(EXTRA_PACKAGES) ?: return null
+        val configs = intent.getParcelableArrayListExtra<Bundle>(EXTRA_CONFIGS).orEmpty()
+        return LinkedHashMap<String, Bundle>(packages.size).apply {
+            packages.forEachIndexed { index, pkg ->
+                this[pkg] = configs.getOrNull(index) ?: Bundle()
+            }
+        }
     }
 
     private fun loadDesiredFromDisk(): Map<String, Bundle> {
@@ -81,7 +90,7 @@ class PluginRuntimeService : Service() {
         private const val EXTRA_PACKAGES = "packages"
         private const val EXTRA_CONFIGS = "configs"
 
-        /** 宿主界面回到前台的唤醒通知，不带配置快照。 */
+        /** 宿主界面回到前台的唤醒通知，同时携带主进程里最新的启用状态与配置快照。 */
         const val ACTION_HOST_FOREGROUND = "org.autojs.autojs.plugin.action.HOST_FOREGROUND"
 
         private const val FOREGROUND_NOTIFY_THROTTLE_MILLIS = 1_000L
@@ -104,12 +113,17 @@ class PluginRuntimeService : Service() {
                 return
             }
             // 一个插件都没启用时不必为唤醒而拉起 :script 进程——那会白白多一个常驻进程。
-            if (runCatching { PluginEnableStore(context).enabledPackages().isEmpty() }
-                    .getOrDefault(true)) {
+            // 同时带上主进程里最新的配置快照，避免 :script 进程用自己那份过期 SP 缓存。
+            val packages = runCatching {
+                PluginEnableStore(context).enabledPackages().map { pkg ->
+                    pkg to PluginConfigStore(context, pkg).snapshot()
+                }
+            }.getOrDefault(emptyList<Pair<String, Map<String, Any?>>>())
+            if (packages.isEmpty()) {
                 return
             }
             lastForegroundNotifyAt = now
-            val intent = Intent(context, PluginRuntimeService::class.java).apply {
+            val intent = buildSyncIntent(context, packages).apply {
                 action = ACTION_HOST_FOREGROUND
             }
             try {
@@ -122,20 +136,24 @@ class PluginRuntimeService : Service() {
         /**
          * 把「当前应当运行的插件集合」下发给 `:script` 进程。
          *
-         * 每次调用都会重建对应插件的实例，因此配置变更也会立即生效
-         * （例如 MCP 改了端口会重启监听）。
+         * 配置快照变化的插件会被重建，因此改端口等配置无需重启宿主即可生效。
          */
         fun sync(context: Context, packages: List<Pair<String, Map<String, Any?>>>) {
-            val intent = Intent(context, PluginRuntimeService::class.java)
+            try {
+                context.startService(buildSyncIntent(context, packages))
+            } catch (e: RuntimeException) {
+                Log.w(TAG, "failed to start plugin runtime service", e)
+            }
+        }
+
+        private fun buildSyncIntent(
+            context: Context,
+            packages: List<Pair<String, Map<String, Any?>>>
+        ): Intent = Intent(context, PluginRuntimeService::class.java).also { intent ->
             intent.putStringArrayListExtra(EXTRA_PACKAGES, ArrayList(packages.map { it.first }))
             val configs = ArrayList<Bundle>(packages.size)
             packages.forEach { configs.add(toConfigBundle(it.second)) }
             intent.putParcelableArrayListExtra(EXTRA_CONFIGS, configs)
-            try {
-                context.startService(intent)
-            } catch (e: RuntimeException) {
-                Log.w(TAG, "failed to start plugin runtime service", e)
-            }
         }
     }
 }

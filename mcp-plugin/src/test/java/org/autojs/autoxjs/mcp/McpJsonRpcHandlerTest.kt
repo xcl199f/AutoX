@@ -56,7 +56,8 @@ class McpJsonRpcHandlerTest {
         val body = response.body
         assertNotNull(body)
         val result = body!!.getAsJsonObject("result")
-        assertEquals("2024-11-05", result.get("protocolVersion").asString)
+        // initialize 必须回服务端支持的版本，而不是回显客户端请求的版本。
+        assertEquals(McpJsonRpcHandler.PROTOCOL_VERSION, result.get("protocolVersion").asString)
         assertTrue(result.getAsJsonObject("capabilities").has("tools"))
     }
 

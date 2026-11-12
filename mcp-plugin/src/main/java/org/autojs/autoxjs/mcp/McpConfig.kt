@@ -9,7 +9,8 @@ data class McpConfig(
     val port: Int = 27190,
     val token: String? = null,
     val allowBase64: Boolean = false,
-    val allowNetwork: Boolean = true,
+    // 默认只允许回环访问；实际 host 由 McpPrefs 按开关覆盖。
+    val allowNetwork: Boolean = false,
     /** 长时间没有请求时是否停掉 HTTP 监听，释放端口与线程。 */
     val idleShutdown: Boolean = true,
     /** 空闲多久算「长时间未使用」，单位分钟。 */

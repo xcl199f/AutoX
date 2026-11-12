@@ -85,6 +85,9 @@ class McpService internal constructor(
     ) { currentConfig }
     private var server: McpServer? = null
     private var activeConfig: McpConfig? = null
+    // 可复用的作用域，stop() 里不要 cancel：SupervisorJob 一旦被取消，
+    // 之后再 start() 时 launch 出来的健康探测/空闲监控会立即结束，
+    // 服务虽重启但这些后台任务永久失效。stop() 已逐个 cancel 两个 Job。
     private val healthScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var healthProbeJob: Job? = null
     private var healthSessionStarted = false

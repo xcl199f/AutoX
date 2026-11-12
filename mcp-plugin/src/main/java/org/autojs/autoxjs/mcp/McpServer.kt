@@ -85,23 +85,32 @@ class McpServer internal constructor(
                             }
 
                             val body = call.receiveText()
-                            Log.d(TAG, "Received body: ${previewForLog(body)}")
+                            // 请求体可能含 token、脚本文本，响应体可能含执行结果，
+                            // 只记长度，不把内容写进 logcat。
+                            Log.d(TAG, "Received body: ${summarizeForLog(body)}")
                             val response = jsonRpcHandler.handleText(body)
                             Log.d(TAG, "Response status: ${response.status}")
                             if (response.body == null) {
                                 call.respond(response.status)
                             } else {
                                 val jsonResponse = gson.toJson(response.body)
-                                Log.d(TAG, "Sending JSON response: ${previewForLog(jsonResponse)}")
+                                Log.d(TAG, "Sending JSON response: ${summarizeForLog(jsonResponse)}")
                                 call.respondText(
                                     jsonResponse,
                                     ContentType.Application.Json,
                                     response.status
                                 )
                             }
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
                         } catch (e: Exception) {
                             Log.e(TAG, "Error handling POST /mcp", e)
-                            call.respond(HttpStatusCode.InternalServerError)
+                            // 兜底也要返回 JSON-RPC error，空体 500 会让客户端解析失败。
+                            call.respondText(
+                                gson.toJson(jsonRpcHandler.internalErrorResponse()),
+                                ContentType.Application.Json,
+                                HttpStatusCode.InternalServerError
+                            )
                         }
                     }
 
@@ -249,30 +258,13 @@ class McpServer internal constructor(
         /** 只放行截图工具写入的文件名，避免任意文件被下载。 */
         private val SCREENSHOT_FILE_NAME = Regex("^mcp-screenshot-\\d+\\.png$")
 
-        /** 日志里保留的报文长度上限，超出部分只记总长。 */
-        private const val LOG_PREVIEW_LIMIT = 512
-
         /**
-         * 报文里的长 base64（内联截图，单张 30~110 KB）在写日志前替换成占位符。
+         * 报文日志摘要：只给长度。
          *
-         * 直接把完整响应写进 logcat 有两个代价：一次请求就写掉上百 KB，
-         * 足以冲掉整个日志缓冲区（排查问题前因后果全丢）；同时每次都要
-         * 拼一个大字符串。这里保留报文结构，只抹掉大块数据。
-         *
-         * 用 `[^"]` 而不是枚举 base64 字符集：编码方式（标准 / URL-safe）变了
-         * 也不会漏掉，只要字段里是 256 个以上的连续非引号字符就认定是大块数据。
+         * 请求体里可能有 token / 脚本文本，响应体里可能有执行结果与内联截图
+         * （单张 30~110 KB）。即使截断到几百字符也会泄露内容，冲掉日志缓冲区，
+         * 因此这里绝不返回任何原文。
          */
-        private val LONG_INLINE_DATA = Regex("\"data\"\\s*:\\s*\"([^\"]{256,})\"")
-
-        internal fun previewForLog(payload: String): String {
-            val masked = payload.replace(LONG_INLINE_DATA) { match ->
-                val dataLength = match.groupValues[1].length
-                "\"data\":\"<inline data $dataLength chars>\""
-            }
-            if (masked.length <= LOG_PREVIEW_LIMIT) {
-                return masked
-            }
-            return masked.take(LOG_PREVIEW_LIMIT) + "...(total ${payload.length} chars)"
-        }
+        internal fun summarizeForLog(payload: String): String = "${payload.length} chars"
     }
 }

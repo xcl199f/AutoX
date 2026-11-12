@@ -37,6 +37,9 @@ class ToolRegistry {
         val entry = tools[name] ?: return McpResponse.error("NotFound", "Tool `$name` not registered")
         return try {
             entry.tool.handle(params)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // 协程取消不是工具失败，吞掉会让已取消的任务假成功并卡住 JobTracker。
+            throw e
         } catch (e: Exception) {
             McpResponse.error("Internal", e.message ?: "Internal error")
         }

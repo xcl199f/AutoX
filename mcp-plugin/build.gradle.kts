@@ -27,11 +27,30 @@ android {
         buildConfig = true
     }
 
+    // 正式发布签名可选：在 gradle.properties 或 -P 里提供
+    // mcp.release.storeFile / storePassword / keyAlias / keyPassword 即自动启用。
+    // 未提供时沿用 debug keystore 便于本地安装验证；注意 Android 默认 debug
+    // 密钥是公开的，同包名插件 APK 可被任意第三方覆盖安装，切勿这样分发。
+    val releaseStoreFile = project.findProperty("mcp.release.storeFile") as? String
+    signingConfigs {
+        if (releaseStoreFile != null) {
+            create("mcpRelease") {
+                storeFile = file(releaseStoreFile)
+                storePassword = project.findProperty("mcp.release.storePassword") as? String
+                keyAlias = project.findProperty("mcp.release.keyAlias") as? String
+                keyPassword = project.findProperty("mcp.release.keyPassword") as? String
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            // 插件以独立 APK 安装，release 沿用 debug 签名以便本地安装验证
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (releaseStoreFile != null) {
+                signingConfigs.getByName("mcpRelease")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             isDebuggable = false
         }
     }

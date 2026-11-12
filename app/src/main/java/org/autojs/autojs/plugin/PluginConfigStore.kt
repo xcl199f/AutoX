@@ -36,14 +36,26 @@ class PluginConfigStore(
     private val listeners =
         ConcurrentHashMap<PluginConfigListener, SharedPreferences.OnSharedPreferenceChangeListener>()
 
-    override fun getString(key: String, defaultValue: String?): String? =
+    // 同一个 key 曾以另一种类型写入（插件升级改了配置 schema）时，
+    // SharedPreferences 的强类型 getter 会直接抛 ClassCastException，
+    // 导致设置页/插件崩溃。这里退回到默认值，让新 schema 正常生效。
+    override fun getString(key: String, defaultValue: String?): String? = try {
         prefs.getString(key, defaultValue)
+    } catch (_: ClassCastException) {
+        defaultValue
+    }
 
-    override fun getBoolean(key: String, defaultValue: Boolean): Boolean =
+    override fun getBoolean(key: String, defaultValue: Boolean): Boolean = try {
         prefs.getBoolean(key, defaultValue)
+    } catch (_: ClassCastException) {
+        defaultValue
+    }
 
-    override fun getInt(key: String, defaultValue: Int): Int =
+    override fun getInt(key: String, defaultValue: Int): Int = try {
         prefs.getInt(key, defaultValue)
+    } catch (_: ClassCastException) {
+        defaultValue
+    }
 
     override fun putString(key: String, value: String?) {
         prefs.edit().putString(key, value).apply()
